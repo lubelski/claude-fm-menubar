@@ -31,10 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
-        let wantsMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
-        if wantsMenu {
+        let isSecondaryClick = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
+        if isSecondaryClick != leftClickOpensMenu {
             rebuildMenu()
-            // Attach the menu only for this click, so a left click keeps toggling playback.
+            // Attach the menu only for this click, so the other button keeps toggling playback.
             statusItem.menu = menu
             sender.performClick(nil)
         } else {
@@ -49,9 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let (symbol, tip, dimmed): (String, String, Bool) = switch player.state {
-        case .stopped: ("radio", "Claude FM: click to play", false)
+        case .stopped: ("radio", "Claude FM: \(leftClickOpensMenu ? "right-click" : "click") to play", false)
         case .loading: ("radio", "Claude FM: connecting…", true)
-        case .playing: ("waveform", "Claude FM: playing. Click to stop.", false)
+        case .playing: ("waveform", "Claude FM: playing. \(leftClickOpensMenu ? "Right-click" : "Click") to stop.", false)
         case .failed(let reason): ("exclamationmark.triangle", "Claude FM: \(reason)", false)
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
@@ -75,15 +75,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Reconnect", #selector(reconnect)))
 
         menu.addItem(.separator())
-        menu.addItem(item("Watch on YouTube", #selector(openStream)))
-        menu.addItem(item("Claude FM Radio Link (clau.de/radio)", #selector(openRadioLink)))
-        menu.addItem(item("Claude Code", #selector(openClaudeCode)))
+        menu.addItem(submenu("Links", [
+            item("Watch on YouTube", #selector(openStream)),
+            item("Claude FM Radio Link (clau.de/radio)", #selector(openRadioLink)),
+            item("Claude Code", #selector(openClaudeCode)),
+        ]))
 
-        menu.addItem(.separator())
+        let clickHeader = NSMenuItem.sectionHeader(title: "Click Behavior")
+        let playOnClick = item("Click to Play, Right-Click for Menu", #selector(setPlayOnClick))
+        playOnClick.state = leftClickOpensMenu ? .off : .on
+        let menuOnClick = item("Click for Menu, Right-Click to Play", #selector(setMenuOnClick))
+        menuOnClick.state = leftClickOpensMenu ? .on : .off
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(login)
-        menu.addItem(item("Quit Claude FM", #selector(quit), key: "q"))
+        menu.addItem(submenu("Options", [
+            clickHeader, playOnClick, menuOnClick,
+            .separator(),
+            login,
+            .separator(),
+            item("Quit Claude FM", #selector(quit), key: "q"),
+        ]))
     }
 
     private var statusLine: String {
@@ -93,6 +104,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .playing: "Claude FM: playing"
         case .failed(let reason): reason
         }
+    }
+
+    private func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let sub = NSMenu(title: title)
+        items.forEach(sub.addItem)
+        parent.submenu = sub
+        return parent
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -107,6 +126,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openRadioLink() { NSWorkspace.shared.open(StreamPlayer.radioLink) }
     @objc private func openClaudeCode() { NSWorkspace.shared.open(URL(string: "https://claude.com/product/claude-code")!) }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    /// When true, a left click opens the menu and a right click toggles playback.
+    private var leftClickOpensMenu: Bool {
+        get { UserDefaults.standard.bool(forKey: "leftClickOpensMenu") }
+        set { UserDefaults.standard.set(newValue, forKey: "leftClickOpensMenu") }
+    }
+
+    @objc private func setPlayOnClick() { leftClickOpensMenu = false; updateButton() }
+    @objc private func setMenuOnClick() { leftClickOpensMenu = true; updateButton() }
 
     @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
