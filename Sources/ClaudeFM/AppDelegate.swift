@@ -81,16 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item("Claude Code", #selector(openClaudeCode)),
         ]))
 
-        let clickHeader = NSMenuItem.sectionHeader(title: "Click Behavior")
-        let playOnClick = item("Click to Play, Right-Click for Menu", #selector(setPlayOnClick))
+        let playOnClick = item("Click to Play", #selector(toggleClickToPlay))
         playOnClick.state = leftClickOpensMenu ? .off : .on
-        let menuOnClick = item("Click for Menu, Right-Click to Play", #selector(setMenuOnClick))
-        menuOnClick.state = leftClickOpensMenu ? .on : .off
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(submenu("Options", [
-            clickHeader, playOnClick, menuOnClick,
-            .separator(),
+            playOnClick,
             login,
             .separator(),
             item("Quit Claude FM", #selector(quit), key: "q"),
@@ -133,8 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(newValue, forKey: "leftClickOpensMenu") }
     }
 
-    @objc private func setPlayOnClick() { leftClickOpensMenu = false; updateButton() }
-    @objc private func setMenuOnClick() { leftClickOpensMenu = true; updateButton() }
+    @objc private func toggleClickToPlay() { leftClickOpensMenu.toggle(); updateButton() }
 
     @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
