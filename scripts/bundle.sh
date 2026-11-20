@@ -20,8 +20,19 @@ BIN="$(swift build -c release --arch arm64 --show-bin-path)/ClaudeFM"
 
 APP="build/Claude FM.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/ClaudeFM"
+
+# The app icon. actool compiles the Icon Composer file into Assets.car, which macOS 26
+# and later draw with the system's glass treatment, and AppIcon.icns for macOS 15.
+# Info.plist names both below. scripts/render-icon.sh redraws the icon's artwork.
+xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" \
+  --platform macosx --minimum-deployment-target 15.0 --app-icon AppIcon \
+  --output-partial-info-plist "$(mktemp -d)/icon.plist" --errors --warnings \
+  --output-format human-readable-text >/dev/null
+for f in Assets.car AppIcon.icns; do
+  [[ -f "$APP/Contents/Resources/$f" ]] || { echo "error: actool didn't produce $f" >&2; exit 1; }
+done
 
 # Sparkle, the updater. SwiftPM builds it next to the binary but doesn't know about
 # app bundles, so copy it in and tell the binary where to find it.
@@ -60,6 +71,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>dev.lubelski.ClaudeFM</string>
   <key>CFBundleExecutable</key><string>ClaudeFM</string>
   <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
