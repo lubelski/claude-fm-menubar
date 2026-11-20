@@ -1,8 +1,8 @@
 import AppKit
 import WebKit
 
-/// Plays the Claude FM YouTube live stream through YouTube's embedded IFrame player,
-/// hosted in a web view that is never shown.
+/// Plays a YouTube stream through YouTube's embedded IFrame player, hosted in a web view
+/// that is never shown. The stream is Claude FM unless the user picked another station.
 @MainActor
 final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     enum State: Equatable {
@@ -23,6 +23,9 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     }
 
     private(set) var videoID: String?
+    /// The video of the station the user picked. Nil is Claude FM, whose video is looked up
+    /// through the radio link.
+    private(set) var pinnedVideoID: String?
     var watchURL: URL {
         URL(string: "https://www.youtube.com/watch?v=\(videoID ?? Self.fallbackVideoID)")!
     }
@@ -39,6 +42,8 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     private var playerReady = false
     private var wantsPlayback = false
     private var hasPlayedOnce = false
+    /// Counts loads, so a lookup that finishes after the station changed is dropped.
+    private var loadGeneration = 0
 
     override init() {
         let saved = UserDefaults.standard.object(forKey: "volume") as? Int
@@ -75,12 +80,27 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         if resume { play() }
     }
 
+    /// Switches to another station, and starts it if `andPlay` is set. Nil is Claude FM.
+    func tune(to pinned: String?, andPlay: Bool) {
+        if pinned != pinnedVideoID {
+            tearDown()
+            wantsPlayback = false
+            pinnedVideoID = pinned
+            videoID = pinned
+        }
+        if andPlay && !isActive { play() }
+    }
+
     // MARK: - Loading
 
     private func load() async {
-        videoID = await Self.resolveVideoID()
-        guard wantsPlayback else { return }
-        buildWebView(videoID: videoID ?? Self.fallbackVideoID)
+        loadGeneration += 1
+        let generation = loadGeneration
+        var id = pinnedVideoID
+        if id == nil { id = await Self.resolveVideoID() }
+        guard generation == loadGeneration, wantsPlayback else { return }
+        videoID = id
+        buildWebView(videoID: id ?? Self.fallbackVideoID)
     }
 
     /// Follows the clau.de/radio redirect and reads the `v` parameter of the YouTube URL it lands on.
@@ -134,6 +154,7 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         webView = nil
         window = nil
         playerReady = false
+        loadGeneration += 1
         state = .stopped
     }
 
@@ -163,7 +184,13 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
             switch value {
             case 1: state = .playing
             case 3: if wantsPlayback { state = .loading }
-            case 0: state = wantsPlayback ? .failed("The stream ended. Try Reconnect.") : .stopped
+            case 0:
+                if wantsPlayback && pinnedVideoID != nil {
+                    // A pasted link can be an ordinary video. A radio keeps going, so loop it.
+                    run("player.playVideo()")
+                } else {
+                    state = wantsPlayback ? .failed("The stream ended. Try Reconnect.") : .stopped
+                }
             case 2: if !wantsPlayback { state = .stopped }
             default: break
             }
