@@ -2,6 +2,8 @@
 
 A macOS menu bar app that plays [Claude FM](https://clau.de/radio), Anthropic's 24/7 lo-fi stream on YouTube.
 
+This is a personal project, not affiliated with Anthropic. The music belongs to the stream and its artists.
+
 - **Click** the radio icon to play or stop. While playing, the icon is a waveform.
 - **Right-click** (or Control-click) for the menu: play/stop, volume, reconnect, links to the stream and Claude Code, launch at login, and quit.
 
@@ -21,3 +23,7 @@ Stopping releases the stream. Playing again reloads it, so playback starts at th
 ```
 
 Requires macOS 15 and Xcode or the Command Line Tools. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
