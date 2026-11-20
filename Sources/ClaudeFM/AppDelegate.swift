@@ -65,19 +65,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = nil
     }
 
+    /// The radio from the app icon, as a template image the menu bar tints.
+    private static let radioImage: NSImage = {
+        let side: CGFloat = 18
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            let scale = side / RadioDrawing.bounds.width
+            context.scaleBy(x: scale, y: scale)
+            context.translateBy(x: -RadioDrawing.bounds.minX, y: -RadioDrawing.bounds.minY)
+            context.setFillColor(.black)
+            RadioDrawing.draw(in: context)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
+
+    /// The icon is always the radio. It is gray unless the station is playing.
     private func updateButton() {
         guard let button = statusItem.button else { return }
-        let (symbol, tip, dimmed): (String, String, Bool) = switch player.state {
-        case .stopped: ("radio", "\(stationName): \(clickToPlay ? "click" : "right-click") to play", false)
-        case .loading: ("radio", "\(stationName): connecting…", true)
-        case .playing: ("waveform", "\(stationName): playing. \(clickToPlay ? "Click" : "Right-click") to stop.", false)
-        case .failed(let reason): ("exclamationmark.triangle", "\(stationName): \(reason)", false)
+        let tip = switch player.state {
+        case .stopped: "\(stationName): \(clickToPlay ? "click" : "right-click") to play"
+        case .loading: "\(stationName): connecting…"
+        case .playing: "\(stationName): playing. \(clickToPlay ? "Click" : "Right-click") to stop."
+        case .failed(let reason): "\(stationName): \(reason)"
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
-        image?.isTemplate = true
+        let image = Self.radioImage
+        image.accessibilityDescription = tip
         button.image = image
         button.toolTip = tip
-        button.appearsDisabled = dimmed
+        button.appearsDisabled = player.state != .playing
     }
 
     // MARK: - Menu

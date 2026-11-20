@@ -7,7 +7,7 @@ A macOS menu bar app that plays [Claude FM](https://clau.de/radio), Anthropic's 
 This is a personal project, not affiliated with Anthropic. The music belongs to the stream and its artists.
 
 - **Click** the radio icon for the menu: play/stop, volume, reconnect, a **Stations** submenu, a **Links** submenu, and an **Options** submenu with Click to Play, Stop When Other Audio Plays, Launch at Login, and Quit. A release build also has Check for Updates… and Update Automatically there.
-- **Right-click** (or Control-click) to play or stop. While playing, the icon is a waveform.
+- **Right-click** (or Control-click) to play or stop. The menu bar icon is the radio from the app icon. It is gray unless a station is playing.
 
 Turn on **Options > Click to Play** to swap them: click to play, right-click for the menu.
 
@@ -42,10 +42,10 @@ The app checks Core Audio's per-process list once a second. Its own audio comes 
 
 Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr.
 
-The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh` compiles. Its artwork is drawn by a script:
+The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh` compiles. Its artwork comes from `RadioDrawing.swift`, the same routine that draws the menu bar icon. After changing the drawing, redraw the artwork:
 
 ```sh
-swift scripts/render-icon.swift Resources/AppIcon.icon/Assets/radio.png
+./scripts/render-icon.sh
 ```
 
 `docs/icon.png` is a picture of the compiled icon for this README. It is not used by the build.

@@ -25,7 +25,7 @@ cp "$BIN" "$APP/Contents/MacOS/ClaudeFM"
 
 # The app icon. actool compiles the Icon Composer file into Assets.car, which macOS 26
 # and later draw with the system's glass treatment, and AppIcon.icns for macOS 15.
-# Info.plist names both below. scripts/render-icon.swift redraws the icon's artwork.
+# Info.plist names both below. scripts/render-icon.sh redraws the icon's artwork.
 xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" \
   --platform macosx --minimum-deployment-target 15.0 --app-icon AppIcon \
   --output-partial-info-plist "$(mktemp -d)/icon.plist" --errors --warnings \
