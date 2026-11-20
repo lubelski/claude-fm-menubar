@@ -1,10 +1,12 @@
 # Claude FM menu bar
 
+<img src="docs/icon.png" width="128" alt="The Claude FM app icon: a white radio on a violet background">
+
 A macOS menu bar app that plays [Claude FM](https://clau.de/radio), Anthropic's 24/7 lo-fi stream on YouTube.
 
 This is a personal project, not affiliated with Anthropic. The music belongs to the stream and its artists.
 
-- **Click** the radio icon for the menu: play/stop, volume, reconnect, a **Links** submenu, and an **Options** submenu with Click to Play, Stop When Other Audio Plays, Launch at Login, and Quit. A release build also has Check for Updates… and Update Automatically there.
+- **Click** the radio icon for the menu: play/stop, volume, reconnect, a **Stations** submenu, a **Links** submenu, and an **Options** submenu with Click to Play, Stop When Other Audio Plays, Launch at Login, and Quit. A release build also has Check for Updates… and Update Automatically there.
 - **Right-click** (or Control-click) to play or stop. While playing, the icon is a waveform.
 
 Turn on **Options > Click to Play** to swap them: click to play, right-click for the menu.
@@ -16,6 +18,14 @@ Claude FM is published only as a YouTube live stream. The app plays it through Y
 The stream's video ID changes when the broadcast restarts. On first play, and on **Reconnect**, the app follows `https://clau.de/radio` to find the current one. If that fails, it falls back to the ID built into `StreamPlayer.swift`.
 
 Stopping releases the stream. Playing again reloads it, so playback starts at the live edge instead of where you stopped.
+
+## Stations
+
+Claude FM is the built-in station. To add another, copy the link to a YouTube video or live stream and choose **Stations > Add Station from Clipboard**. The app names the station after the video's title and starts playing it. Picking a station in the submenu switches to it, and the choice is remembered.
+
+A station you add points at one video. When a live stream's broadcast restarts, it gets a new video ID and the old link stops working. The app then reports that the stream is no longer available. Choose **Stations > Remove** while the station is selected, and add the new link.
+
+An ordinary video loops when it ends. Videos that don't allow embedded playback can't be played.
 
 ## Stop When Other Audio Plays
 
@@ -30,7 +40,15 @@ The app checks Core Audio's per-process list once a second. Its own audio comes 
 ./scripts/bundle.sh --install  # moves it to ~/Applications and launches it
 ```
 
-Requires macOS 15 and Xcode or the Command Line Tools. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr.
+Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr.
+
+The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh` compiles. Its artwork is drawn by a script:
+
+```sh
+swift scripts/render-icon.swift Resources/AppIcon.icon/Assets/radio.png
+```
+
+`docs/icon.png` is a picture of the compiled icon for this README. It is not used by the build.
 
 ## Releases and updates
 
