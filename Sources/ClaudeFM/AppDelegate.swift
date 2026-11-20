@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let otherAudio = OtherAudioMonitor()
+    private lazy var updater = AppUpdater { [weak self] in self?.player.isActive != true }
 
     private func updateMonitor() {
         if stopForOtherAudio && player.isActive {
@@ -28,12 +29,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSLog("Claude FM state: %@", String(describing: state))
             self?.updateButton()
             self?.updateMonitor()
+            self?.updater.installPendingUpdate()
         }
         otherAudio.onOtherAudioStarted = { [weak self] in
             NSLog("Claude FM: stopping because another app started playing")
             self?.player.stop()
         }
         updateButton()
+        // Start the updater at launch, so it checks on its own schedule.
+        _ = updater
 
         // For testing from a terminal: CLAUDE_FM_AUTOPLAY=1 starts playback at launch.
         if ProcessInfo.processInfo.environment["CLAUDE_FM_AUTOPLAY"] == "1" {
@@ -101,13 +105,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         let stopForOther = item("Stop When Other Audio Plays", #selector(toggleStopForOtherAudio))
         stopForOther.state = stopForOtherAudio ? .on : .off
-        menu.addItem(submenu("Options", [
-            playOnClick,
-            stopForOther,
-            login,
-            .separator(),
-            item("Quit Claude FM", #selector(quit), key: "q"),
-        ]))
+        var options = [playOnClick, stopForOther, login]
+        if updater.isAvailable {
+            let check = item("Check for Updates…", #selector(checkForUpdates))
+            if !updater.canCheck {
+                check.action = nil
+            }
+            let automatic = item("Update Automatically", #selector(toggleUpdatesAutomatically))
+            automatic.state = updater.updatesAutomatically ? .on : .off
+            options += [.separator(), check, automatic]
+        }
+        options += [.separator(), item("Quit Claude FM", #selector(quit), key: "q")]
+        menu.addItem(submenu("Options", options))
     }
 
     private var statusLine: String {
@@ -155,6 +164,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleStopForOtherAudio() { stopForOtherAudio.toggle(); updateMonitor() }
+
+    @objc private func checkForUpdates() { updater.checkForUpdates() }
+    @objc private func toggleUpdatesAutomatically() { updater.updatesAutomatically.toggle() }
 
     @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
