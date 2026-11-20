@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         let isSecondaryClick = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
-        if isSecondaryClick != leftClickOpensMenu {
+        if isSecondaryClick == clickToPlay {
             rebuildMenu()
             // Attach the menu only for this click, so the other button keeps toggling playback.
             statusItem.menu = menu
@@ -49,9 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let (symbol, tip, dimmed): (String, String, Bool) = switch player.state {
-        case .stopped: ("radio", "Claude FM: \(leftClickOpensMenu ? "right-click" : "click") to play", false)
+        case .stopped: ("radio", "Claude FM: \(clickToPlay ? "click" : "right-click") to play", false)
         case .loading: ("radio", "Claude FM: connecting…", true)
-        case .playing: ("waveform", "Claude FM: playing. \(leftClickOpensMenu ? "Right-click" : "Click") to stop.", false)
+        case .playing: ("waveform", "Claude FM: playing. \(clickToPlay ? "Click" : "Right-click") to stop.", false)
         case .failed(let reason): ("exclamationmark.triangle", "Claude FM: \(reason)", false)
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ]))
 
         let playOnClick = item("Click to Play", #selector(toggleClickToPlay))
-        playOnClick.state = leftClickOpensMenu ? .off : .on
+        playOnClick.state = clickToPlay ? .on : .off
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(submenu("Options", [
@@ -123,13 +123,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openClaudeCode() { NSWorkspace.shared.open(URL(string: "https://claude.com/product/claude-code")!) }
     @objc private func quit() { NSApp.terminate(nil) }
 
-    /// When true, a left click opens the menu and a right click toggles playback.
-    private var leftClickOpensMenu: Bool {
-        get { UserDefaults.standard.bool(forKey: "leftClickOpensMenu") }
-        set { UserDefaults.standard.set(newValue, forKey: "leftClickOpensMenu") }
+    /// When true, a left click toggles playback and a right click opens the menu. Off by default.
+    private var clickToPlay: Bool {
+        get { UserDefaults.standard.bool(forKey: "clickToPlay") }
+        set { UserDefaults.standard.set(newValue, forKey: "clickToPlay") }
     }
 
-    @objc private func toggleClickToPlay() { leftClickOpensMenu.toggle(); updateButton() }
+    @objc private func toggleClickToPlay() { clickToPlay.toggle(); updateButton() }
 
     @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
