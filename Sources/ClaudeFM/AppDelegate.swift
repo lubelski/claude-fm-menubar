@@ -6,6 +6,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let player = StreamPlayer()
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
+    private let otherAudio = OtherAudioMonitor()
+
+    private func updateMonitor() {
+        if stopForOtherAudio && player.isActive {
+            otherAudio.start()
+        } else {
+            otherAudio.stop()
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -18,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         player.onStateChange = { [weak self] state in
             NSLog("Claude FM state: %@", String(describing: state))
             self?.updateButton()
+            self?.updateMonitor()
+        }
+        otherAudio.onOtherAudioStarted = { [weak self] in
+            NSLog("Claude FM: stopping because another app started playing")
+            self?.player.stop()
         }
         updateButton()
 
@@ -85,8 +99,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         playOnClick.state = clickToPlay ? .on : .off
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        let stopForOther = item("Stop When Other Audio Plays", #selector(toggleStopForOtherAudio))
+        stopForOther.state = stopForOtherAudio ? .on : .off
         menu.addItem(submenu("Options", [
             playOnClick,
+            stopForOther,
             login,
             .separator(),
             item("Quit Claude FM", #selector(quit), key: "q"),
@@ -130,6 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleClickToPlay() { clickToPlay.toggle(); updateButton() }
+
+    /// When true, playback stops once another app starts playing audio. Off by default.
+    private var stopForOtherAudio: Bool {
+        get { UserDefaults.standard.bool(forKey: "stopForOtherAudio") }
+        set { UserDefaults.standard.set(newValue, forKey: "stopForOtherAudio") }
+    }
+
+    @objc private func toggleStopForOtherAudio() { stopForOtherAudio.toggle(); updateMonitor() }
 
     @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
