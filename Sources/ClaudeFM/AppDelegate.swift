@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let otherAudio = OtherAudioMonitor()
+    private let icon = RadioIcon()
 
     private func updateMonitor() {
         if stopForOtherAudio && player.isActive {
@@ -24,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         menu.delegate = self
+        icon.onImage = { [weak self] image in self?.statusItem.button?.image = image }
         player.onStateChange = { [weak self] state in
             NSLog("Claude FM state: %@", String(describing: state))
             self?.updateButton()
@@ -62,17 +64,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateButton() {
         guard let button = statusItem.button else { return }
-        let (symbol, tip, dimmed): (String, String, Bool) = switch player.state {
-        case .stopped: ("radio", "Claude FM: \(clickToPlay ? "click" : "right-click") to play", false)
-        case .loading: ("radio", "Claude FM: connecting…", true)
-        case .playing: ("waveform", "Claude FM: playing. \(clickToPlay ? "Click" : "Right-click") to stop.", false)
-        case .failed(let reason): ("exclamationmark.triangle", "Claude FM: \(reason)", false)
+        let (mode, tip): (RadioIcon.Mode, String) = switch player.state {
+        case .stopped: (.off, "Claude FM: \(clickToPlay ? "click" : "right-click") to play")
+        case .loading: (.searching, "Claude FM: connecting…")
+        case .playing: (.on, "Claude FM: playing. \(clickToPlay ? "Click" : "Right-click") to stop.")
+        case .failed(let reason): (.trouble, "Claude FM: \(reason)")
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
-        image?.isTemplate = true
-        button.image = image
+        icon.setMode(mode)
+        if button.image == nil { button.image = icon.currentImage() }
         button.toolTip = tip
-        button.appearsDisabled = dimmed
+        button.setAccessibilityLabel(tip)
     }
 
     // MARK: - Menu

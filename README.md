@@ -5,7 +5,9 @@ A macOS menu bar app that plays [Claude FM](https://clau.de/radio), Anthropic's 
 This is a personal project, not affiliated with Anthropic. The music belongs to the stream and its artists.
 
 - **Click** the radio icon for the menu: play/stop, volume, reconnect, a **Links** submenu, and an **Options** submenu with Click to Play, Stop When Other Audio Plays, Launch at Login, and Quit.
-- **Right-click** (or Control-click) to play or stop. While playing, the icon is a waveform.
+- **Right-click** (or Control-click) to play or stop.
+
+The icon shows what the player is doing. Stopped, the radio is faded with its antenna folded down. While connecting or buffering, the antenna swings back and forth like it's hunting for a station. If the stream fails, the antenna leans over and shakes every couple of seconds. While playing, the icon is a waveform.
 
 Turn on **Options > Click to Play** to swap them: click to play, right-click for the menu.
 
