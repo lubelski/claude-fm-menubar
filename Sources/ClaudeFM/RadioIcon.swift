@@ -1,8 +1,9 @@
 import AppKit
 
-/// The menu bar icon. It draws the `radio` symbol's body with its own antenna, so the antenna
-/// can move: folded down and faded when off, swinging around while it looks for the stream,
-/// and twitching when the stream is broken. While playing it shows the `waveform` symbol.
+/// The menu bar icon: the radio from the app icon, with an antenna that shows what the
+/// player is doing. Off, it is faded and the antenna is pushed down into the body. While it
+/// looks for the stream the antenna swings back and forth, and when the stream is broken
+/// the antenna sags and twitches. Playing, it looks like the app icon.
 @MainActor
 final class RadioIcon {
     enum Mode: Equatable {
@@ -12,55 +13,39 @@ final class RadioIcon {
         case on
     }
 
-    /// Antenna angle in degrees above horizontal (leaning left), how far it is pulled out
-    /// (0...1), and the opacity of the whole icon.
     struct Pose {
-        var angle: Double
-        var reach: Double
-        var alpha: Double
+        var antenna: RadioDrawing.Antenna
+        var alpha: CGFloat
     }
 
-    static let upPose = Pose(angle: 17, reach: 1, alpha: 1)
-    static let downPose = Pose(angle: 0, reach: 0.35, alpha: 0.4)
+    static let onPose = Pose(antenna: .standard, alpha: 1)
+    static let offPose = Pose(antenna: .init(angle: 0, reach: 0.35), alpha: 0.4)
 
     /// Called with each new frame.
     var onImage: ((NSImage) -> Void)?
 
     private(set) var mode: Mode = .off
-    private var pose = downPose
+    private var pose = offPose
     private var modeStart = Date()
     private var timer: Timer?
-    private let body = NSImage(systemSymbolName: "radio", accessibilityDescription: nil)!
-    private let waveform = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)!
-
-    init() {
-        waveform.isTemplate = true
-    }
 
     func setMode(_ newMode: Mode) {
         guard newMode != mode else { return }
         mode = newMode
         modeStart = Date()
-        if mode == .on {
-            // Stopping from here starts the fold-down from a raised antenna.
-            pose = Self.upPose
-            stopTimer()
-            onImage?(waveform)
-            return
-        }
         if reduceMotion {
             pose = target(at: 0)
             stopTimer()
-            onImage?(render(pose))
+            onImage?(Self.image(pose))
             return
         }
         startTimer()
         tick()
     }
 
-    /// Draws the current frame without animating, for the first image at launch.
+    /// The current frame, for the first image at launch.
     func currentImage() -> NSImage {
-        mode == .on ? waveform : render(pose)
+        Self.image(pose)
     }
 
     // MARK: - Animation
@@ -87,77 +72,63 @@ final class RadioIcon {
     private func tick() {
         let goal = target(at: Date().timeIntervalSince(modeStart))
         // Ease toward the goal each frame. This also carries the fade and the fold between modes.
-        let k = 0.22
-        pose.angle += (goal.angle - pose.angle) * k
-        pose.reach += (goal.reach - pose.reach) * k
+        let k: CGFloat = 0.22
+        pose.antenna.angle += (goal.antenna.angle - pose.antenna.angle) * k
+        pose.antenna.reach += (goal.antenna.reach - pose.antenna.reach) * k
         pose.alpha += (goal.alpha - pose.alpha) * k
-        onImage?(render(pose))
 
-        if mode == .off,
-           abs(goal.angle - pose.angle) < 0.2, abs(goal.reach - pose.reach) < 0.005,
-           abs(goal.alpha - pose.alpha) < 0.005 {
+        // Off and on hold still, so stop drawing once they settle.
+        let settled = abs(goal.antenna.angle - pose.antenna.angle) < 0.2
+            && abs(goal.antenna.reach - pose.antenna.reach) < 0.005
+            && abs(goal.alpha - pose.alpha) < 0.005
+        if settled && (mode == .off || mode == .on) {
             pose = goal
-            onImage?(render(pose))
             stopTimer()
         }
+        onImage?(Self.image(pose))
     }
 
-    /// Where the antenna wants to be, `t` seconds into the current mode.
+    /// Where the icon wants to be, `t` seconds into the current mode.
     private func target(at t: Double) -> Pose {
         switch mode {
-        case .off, .on:
-            return mode == .off ? Self.downPose : Self.upPose
+        case .off:
+            return Self.offPose
+        case .on:
+            return Self.onPose
         case .searching:
             // Swing the antenna back and forth, like hunting for a station.
-            let swing = reduceMotion ? 0 : sin(2 * .pi * t / 1.6)
-            return Pose(angle: 22 + 16 * swing, reach: 1, alpha: 1)
+            let swing = reduceMotion ? 0 : CGFloat(sin(2 * .pi * t / 1.6))
+            return Pose(antenna: .init(angle: 34 + 20 * swing, reach: 1), alpha: 1)
         case .trouble:
-            // Leaned over, with a short shake every couple of seconds.
-            var angle = 30.0
+            // Sagging and shorter, with a short shake every couple of seconds.
+            var angle: CGFloat = 8
             let phase = t.truncatingRemainder(dividingBy: 2.2)
             if !reduceMotion && phase < 0.6 {
-                angle += 7 * sin(2 * .pi * phase * 6) * (1 - phase / 0.6)
+                angle += 7 * CGFloat(sin(2 * .pi * phase * 6) * (1 - phase / 0.6))
             }
-            return Pose(angle: angle, reach: 0.75, alpha: 1)
+            return Pose(antenna: .init(angle: angle, reach: 0.75), alpha: 1)
         }
     }
 
     // MARK: - Drawing
 
-    private func render(_ pose: Pose) -> NSImage {
-        let body = self.body
-        // Extra room above and below so a raised antenna fits. The body stays centered.
-        let pad = 2.0
-        let size = NSSize(width: body.size.width, height: body.size.height + 2 * pad)
-        let image = NSImage(size: size, flipped: false) { rect in
-            guard let cg = NSGraphicsContext.current?.cgContext else { return false }
-            let scale = rect.width / size.width
-            let bodyRect = NSRect(x: 0, y: pad * scale, width: rect.width, height: rect.height - 2 * pad * scale)
-            let w = bodyRect.width, h = bodyRect.height, y0 = bodyRect.minY
+    /// The icon is 18pt wide like the radio, with 2pt of room above and below so a raised
+    /// antenna fits. The radio stays centered.
+    static let size = NSSize(width: 18, height: 22)
 
-            // Fade the body and antenna as one layer, so they don't stack where they overlap.
-            cg.setAlpha(pose.alpha)
-            cg.beginTransparencyLayer(auxiliaryInfo: nil)
-
-            // The symbol's own antenna sits entirely above the body's top edge. Clip it off.
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: NSRect(x: 0, y: 0, width: w, height: y0 + h * 0.758)).setClip()
-            body.draw(in: bodyRect)
-            NSGraphicsContext.restoreGraphicsState()
-
-            // Pivot where the symbol's antenna meets the body, near the top-right corner.
-            let pivot = NSPoint(x: w * 0.765, y: y0 + h * 0.745)
-            let length = w * 0.51 * pose.reach
-            let radians = pose.angle * .pi / 180
-            let antenna = NSBezierPath()
-            antenna.move(to: pivot)
-            antenna.line(to: NSPoint(x: pivot.x - length * cos(radians), y: pivot.y + length * sin(radians)))
-            antenna.lineWidth = w * 0.053
-            antenna.lineCapStyle = .round
-            NSColor.black.setStroke()
-            antenna.stroke()
-
-            cg.endTransparencyLayer()
+    static func image(_ pose: Pose) -> NSImage {
+        let image = NSImage(size: size, flipped: false) { _ in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            // Fade the whole radio as one layer, so the cutouts stay clear.
+            context.setAlpha(pose.alpha)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            let scale = size.width / RadioDrawing.bounds.width
+            context.translateBy(x: 0, y: (size.height - size.width) / 2)
+            context.scaleBy(x: scale, y: scale)
+            context.translateBy(x: -RadioDrawing.bounds.minX, y: -RadioDrawing.bounds.minY)
+            context.setFillColor(.black)
+            RadioDrawing.draw(in: context, antenna: pose.antenna)
+            context.endTransparencyLayer()
             return true
         }
         image.isTemplate = true

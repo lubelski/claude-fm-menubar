@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let menu = NSMenu()
     private let otherAudio = OtherAudioMonitor()
     private let icon = RadioIcon()
+    private lazy var updater = AppUpdater { [weak self] in self?.player.isActive != true }
 
     private func updateMonitor() {
         if stopForOtherAudio && player.isActive {
@@ -30,12 +31,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSLog("Claude FM state: %@", String(describing: state))
             self?.updateButton()
             self?.updateMonitor()
+            self?.updater.installPendingUpdate()
         }
         otherAudio.onOtherAudioStarted = { [weak self] in
             NSLog("Claude FM: stopping because another app started playing")
             self?.player.stop()
         }
+        player.tune(to: StationStore.selectedVideoID, andPlay: false)
         updateButton()
+        // Start the updater at launch, so it checks on its own schedule.
+        _ = updater
 
         // For testing from a terminal: CLAUDE_FM_AUTOPLAY=1 starts playback at launch.
         if ProcessInfo.processInfo.environment["CLAUDE_FM_AUTOPLAY"] == "1" {
@@ -62,13 +67,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = nil
     }
 
+    /// The icon is always the radio. Its antenna and opacity show the player's state.
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let (mode, tip): (RadioIcon.Mode, String) = switch player.state {
-        case .stopped: (.off, "Claude FM: \(clickToPlay ? "click" : "right-click") to play")
-        case .loading: (.searching, "Claude FM: connecting…")
-        case .playing: (.on, "Claude FM: playing. \(clickToPlay ? "Click" : "Right-click") to stop.")
-        case .failed(let reason): (.trouble, "Claude FM: \(reason)")
+        case .stopped: (.off, "\(stationName): \(clickToPlay ? "click" : "right-click") to play")
+        case .loading: (.searching, "\(stationName): connecting…")
+        case .playing: (.on, "\(stationName): playing. \(clickToPlay ? "Click" : "Right-click") to stop.")
+        case .failed(let reason): (.trouble, "\(stationName): \(reason)")
         }
         icon.setMode(mode)
         if button.image == nil { button.image = icon.currentImage() }
@@ -88,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item(player.isActive ? "Stop" : "Play", #selector(togglePlayback)))
         menu.addItem(VolumeMenuItem(volume: player.volume) { [weak self] in self?.player.volume = $0 })
         menu.addItem(item("Reconnect", #selector(reconnect)))
+        menu.addItem(submenu("Stations", stationItems()))
 
         menu.addItem(.separator())
         menu.addItem(submenu("Links", [
@@ -102,20 +109,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         let stopForOther = item("Stop When Other Audio Plays", #selector(toggleStopForOtherAudio))
         stopForOther.state = stopForOtherAudio ? .on : .off
-        menu.addItem(submenu("Options", [
-            playOnClick,
-            stopForOther,
-            login,
-            .separator(),
-            item("Quit Claude FM", #selector(quit), key: "q"),
-        ]))
+        var options = [playOnClick, stopForOther, login]
+        if updater.isAvailable {
+            let check = item("Check for Updates…", #selector(checkForUpdates))
+            if !updater.canCheck {
+                check.action = nil
+            }
+            let automatic = item("Update Automatically", #selector(toggleUpdatesAutomatically))
+            automatic.state = updater.updatesAutomatically ? .on : .off
+            options += [.separator(), check, automatic]
+        }
+        options += [.separator(), item("Quit Claude FM", #selector(quit), key: "q")]
+        menu.addItem(submenu("Options", options))
+    }
+
+    private func stationItems() -> [NSMenuItem] {
+        let selected = player.pinnedVideoID
+        let claudeFM = item("Claude FM", #selector(selectStation(_:)))
+        claudeFM.state = selected == nil ? .on : .off
+        var items = [claudeFM]
+        for station in StationStore.stations {
+            let entry = item(station.name, #selector(selectStation(_:)))
+            entry.representedObject = station.videoID
+            entry.state = selected == station.videoID ? .on : .off
+            items.append(entry)
+        }
+        items += [.separator(), item("Add Station from Clipboard", #selector(addStationFromClipboard))]
+        if let current = currentStation {
+            items.append(item("Remove “\(current.name)”", #selector(removeCurrentStation)))
+        }
+        return items
+    }
+
+    /// The station the user added that is selected now. Nil when Claude FM is.
+    private var currentStation: Station? {
+        StationStore.stations.first { $0.videoID == player.pinnedVideoID }
+    }
+
+    private var stationName: String { currentStation?.name ?? "Claude FM" }
+
+    private func tune(to videoID: String?, andPlay: Bool) {
+        StationStore.selectedVideoID = videoID
+        player.tune(to: videoID, andPlay: andPlay)
+        updateButton()
+    }
+
+    @objc private func selectStation(_ sender: NSMenuItem) {
+        tune(to: sender.representedObject as? String, andPlay: true)
+    }
+
+    @objc private func addStationFromClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              let videoID = Station.videoID(from: text)
+        else {
+            let alert = NSAlert()
+            alert.messageText = "No YouTube link on the clipboard"
+            alert.informativeText = "Copy the link to a YouTube video or live stream, then choose Add Station from Clipboard again."
+            NSApp.activate()
+            alert.runModal()
+            return
+        }
+        if !StationStore.stations.contains(where: { $0.videoID == videoID }) {
+            // Show the ID until the title arrives, so the station is usable right away.
+            StationStore.stations.append(Station(name: "YouTube \(videoID)", videoID: videoID))
+            Task {
+                guard let title = await Station.fetchTitle(videoID: videoID) else { return }
+                var stations = StationStore.stations
+                guard let index = stations.firstIndex(where: { $0.videoID == videoID }) else { return }
+                stations[index].name = title
+                StationStore.stations = stations
+                updateButton()
+            }
+        }
+        tune(to: videoID, andPlay: true)
+    }
+
+    @objc private func removeCurrentStation() {
+        guard let current = currentStation else { return }
+        let wasActive = player.isActive
+        StationStore.stations.removeAll { $0.videoID == current.videoID }
+        tune(to: nil, andPlay: wasActive)
     }
 
     private var statusLine: String {
         switch player.state {
-        case .stopped: "Claude FM: stopped"
-        case .loading: "Claude FM: connecting…"
-        case .playing: "Claude FM: playing"
+        case .stopped: "\(stationName): stopped"
+        case .loading: "\(stationName): connecting…"
+        case .playing: "\(stationName): playing"
         case .failed(let reason): reason
         }
     }
@@ -156,6 +236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleStopForOtherAudio() { stopForOtherAudio.toggle(); updateMonitor() }
+
+    @objc private func checkForUpdates() { updater.checkForUpdates() }
+    @objc private func toggleUpdatesAutomatically() { updater.updatesAutomatically.toggle() }
 
     @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp

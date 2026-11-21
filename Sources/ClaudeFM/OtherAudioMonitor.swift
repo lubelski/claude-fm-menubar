@@ -82,6 +82,9 @@ final class OtherAudioMonitor {
             mElement: kAudioObjectPropertyElementMain)
         var value = initial
         var size = UInt32(MemoryLayout<T>.size)
-        return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr ? value : nil
+        let status = withUnsafeMutableBytes(of: &value) { bytes in
+            AudioObjectGetPropertyData(object, &address, 0, nil, &size, bytes.baseAddress!)
+        }
+        return status == noErr ? value : nil
     }
 }
