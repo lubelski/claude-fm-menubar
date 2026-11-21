@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let otherAudio = OtherAudioMonitor()
+    private let icon = RadioIcon()
     private lazy var updater = AppUpdater { [weak self] in self?.player.isActive != true }
 
     private func updateMonitor() {
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         menu.delegate = self
+        icon.onImage = { [weak self] image in self?.statusItem.button?.image = image }
         player.onStateChange = { [weak self] state in
             NSLog("Claude FM state: %@", String(describing: state))
             self?.updateButton()
@@ -65,36 +67,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = nil
     }
 
-    /// The radio from the app icon, as a template image the menu bar tints.
-    private static let radioImage: NSImage = {
-        let side: CGFloat = 18
-        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in
-            guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            let scale = side / RadioDrawing.bounds.width
-            context.scaleBy(x: scale, y: scale)
-            context.translateBy(x: -RadioDrawing.bounds.minX, y: -RadioDrawing.bounds.minY)
-            context.setFillColor(.black)
-            RadioDrawing.draw(in: context)
-            return true
-        }
-        image.isTemplate = true
-        return image
-    }()
-
-    /// The icon is always the radio. It is gray unless the station is playing.
+    /// The icon is always the radio. Its antenna and opacity show the player's state.
     private func updateButton() {
         guard let button = statusItem.button else { return }
-        let tip = switch player.state {
-        case .stopped: "\(stationName): \(clickToPlay ? "click" : "right-click") to play"
-        case .loading: "\(stationName): connecting…"
-        case .playing: "\(stationName): playing. \(clickToPlay ? "Click" : "Right-click") to stop."
-        case .failed(let reason): "\(stationName): \(reason)"
+        let (mode, tip): (RadioIcon.Mode, String) = switch player.state {
+        case .stopped: (.off, "\(stationName): \(clickToPlay ? "click" : "right-click") to play")
+        case .loading: (.searching, "\(stationName): connecting…")
+        case .playing: (.on, "\(stationName): playing. \(clickToPlay ? "Click" : "Right-click") to stop.")
+        case .failed(let reason): (.trouble, "\(stationName): \(reason)")
         }
-        let image = Self.radioImage
-        image.accessibilityDescription = tip
-        button.image = image
+        icon.setMode(mode)
+        if button.image == nil { button.image = icon.currentImage() }
         button.toolTip = tip
-        button.appearsDisabled = player.state != .playing
+        button.setAccessibilityLabel(tip)
     }
 
     // MARK: - Menu

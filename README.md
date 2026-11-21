@@ -7,7 +7,11 @@ A macOS menu bar app that plays [Claude FM](https://clau.de/radio), Anthropic's 
 This is a personal project, not affiliated with Anthropic. The music belongs to the stream and its artists.
 
 - **Click** the radio icon for the menu: play/stop, volume, reconnect, a **Stations** submenu, a **Links** submenu, and an **Options** submenu with Click to Play, Stop When Other Audio Plays, Launch at Login, and Quit. A release build also has Check for Updates… and Update Automatically there.
-- **Right-click** (or Control-click) to play or stop. The menu bar icon is the radio from the app icon. It is gray unless a station is playing.
+- **Right-click** (or Control-click) to play or stop.
+
+The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings back and forth like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu's status line says why.
+
+<img src="docs/menubar-icon.gif" width="512" alt="The menu bar icon on light and dark menu bars, animating through connecting, playing, stopped, and stream failed">
 
 Turn on **Options > Click to Play** to swap them: click to play, right-click for the menu.
 
@@ -49,6 +53,12 @@ The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh`
 ```
 
 `docs/icon.png` is a picture of the compiled icon for this README. It is not used by the build.
+
+`docs/menubar-icon.gif` and `docs/menubar-icon.png` show the menu bar icon in each player state. They are drawn by the app's own icon code. After changing how the menu bar icon looks or moves, redraw them:
+
+```sh
+./scripts/render-menubar-icon.sh
+```
 
 ## Releases and updates
 

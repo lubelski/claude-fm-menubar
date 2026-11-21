@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// The one routine that draws the radio, for the app icon and the menu bar icon.
 enum RadioDrawing {
@@ -7,20 +8,37 @@ enum RadioDrawing {
     /// The square around the radio itself, for callers that want it without the margin.
     static let bounds = CGRect(x: 212, y: 242, width: 600, height: 600)
 
+    /// Where the antenna points: degrees above horizontal, leaning right, and how far it is
+    /// pulled out (0...1). The menu bar icon moves it to show the player's state.
+    struct Antenna {
+        var angle: CGFloat
+        var reach: CGFloat
+
+        /// The antenna in the app icon, from the body's top left corner to (600, 790).
+        static let standard = Antenna(angle: atan2(CGFloat(790 - 610), CGFloat(600 - 330)) * 180 / .pi, reach: 1)
+    }
+
+    /// Where the antenna leaves the body, and its length at full reach.
+    private static let antennaPivot = CGPoint(x: 330, y: 610)
+    private static let antennaLength: CGFloat = hypot(600 - 330, 790 - 610)
+
     /// Draws the radio in the context's current fill color, on a clear background.
     /// The context needs a transparent backing, because the details are cut out of the body.
-    static func draw(in context: CGContext) {
+    static func draw(in context: CGContext, antenna: Antenna = .standard) {
         context.saveGState()
         defer { context.restoreGState() }
 
-        // Antenna, from the top left corner of the body up to the right.
+        // Antenna, from the top left corner of the body up to the right, with a ball on the tip.
+        let radians = antenna.angle * .pi / 180
+        let length = antennaLength * antenna.reach
+        let tip = CGPoint(x: antennaPivot.x + length * cos(radians), y: antennaPivot.y + length * sin(radians))
         context.setLineWidth(30)
         context.setLineCap(.round)
-        context.move(to: CGPoint(x: 330, y: 610))
-        context.addLine(to: CGPoint(x: 600, y: 790))
+        context.move(to: antennaPivot)
+        context.addLine(to: tip)
         context.replacePathWithStrokedPath()
         context.fillPath()
-        context.fillEllipse(in: CGRect(x: 576, y: 766, width: 48, height: 48))
+        context.fillEllipse(in: CGRect(x: tip.x - 24, y: tip.y - 24, width: 48, height: 48))
 
         // Body.
         let body = CGRect(x: 222, y: 270, width: 580, height: 360)
