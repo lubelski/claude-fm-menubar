@@ -1,12 +1,33 @@
 import Foundation
 
-/// A station the user added by pasting a YouTube link. Claude FM itself is not one of these:
-/// it is built in, and its video ID is looked up each time.
-struct Station: Codable, Equatable {
+/// One entry in the station list. Claude FM is seeded into the list on first launch and is
+/// an ordinary station after that: it can be renamed, moved and removed like any other.
+struct Station: Codable, Equatable, Identifiable {
+    /// Why a station last failed to play, and when. Nothing checks stations in the
+    /// background, so this is only ever set by trying to play one.
+    struct Failure: Codable, Equatable {
+        var reason: String
+        var date: Date
+    }
+
+    var id = UUID()
     var name: String
-    /// The video the link pointed at. A live stream gets a new ID when its broadcast
-    /// restarts, and then this station stops working until the user adds it again.
-    let videoID: String
+    /// The video the link pointed at. Nil follows clau.de/radio, which is looked up on each
+    /// play. A live stream gets a new ID when its broadcast restarts, and then a station
+    /// with a fixed ID stops working until its link is replaced.
+    var videoID: String?
+    /// The YouTube channel, when it is known.
+    var channel: String?
+    var failure: Failure?
+    var lastPlayed: Date?
+
+    static func claudeFM() -> Station {
+        Station(name: "Claude FM", videoID: nil)
+    }
+
+    var source: StreamPlayer.Source {
+        videoID.map(StreamPlayer.Source.video) ?? .radioLink
+    }
 
     /// The video ID in a pasted YouTube link, or nil if the text isn't one.
     static func videoID(from text: String) -> String? {
@@ -77,28 +98,5 @@ struct Station: Codable, Equatable {
     private static func clean(_ title: String?) -> String? {
         guard let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
         return title
-    }
-}
-
-/// The user's stations and which one is selected, kept in UserDefaults.
-enum StationStore {
-    private static let listKey = "stations"
-    private static let selectedKey = "selectedStation"
-
-    static var stations: [Station] {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: listKey) else { return [] }
-            return (try? JSONDecoder().decode([Station].self, from: data)) ?? []
-        }
-        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: listKey) }
-    }
-
-    /// The selected station's video ID. Nil is Claude FM.
-    static var selectedVideoID: String? {
-        get {
-            let id = UserDefaults.standard.string(forKey: selectedKey)
-            return stations.contains { $0.videoID == id } ? id : nil
-        }
-        set { UserDefaults.standard.set(newValue, forKey: selectedKey) }
     }
 }

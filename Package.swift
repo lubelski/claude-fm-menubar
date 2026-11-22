@@ -12,5 +12,6 @@ let package = Package(
             name: "ClaudeFM",
             dependencies: [.product(name: "Sparkle", package: "Sparkle")]
         ),
+        .testTarget(name: "ClaudeFMTests", dependencies: ["ClaudeFM"]),
     ]
 )
