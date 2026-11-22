@@ -139,7 +139,7 @@ struct StationsTab: View {
                     .controlSize(.small)
             } else if isCurrent && model.isActive {
                 Image(systemName: "speaker.wave.2.fill")
-                    .foregroundStyle(Color.claudeViolet)
+                    .foregroundStyle(.tint)
                     .accessibilityLabel("Playing")
             } else {
                 Button {

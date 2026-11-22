@@ -110,10 +110,8 @@ struct SettingsView: View {
                 .fixedSize()
             }
         }
-        .tint(.claudeViolet)
         .sheet(item: $navigation.sheet) { request in
             AddStationSheet(model: model, request: request)
-                .tint(.claudeViolet)
         }
     }
 }

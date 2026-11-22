@@ -73,7 +73,7 @@ struct StationThumbnail: View {
 }
 
 extension Color {
-    /// The app's accent. It is the violet the designs use, which sits inside the app
-    /// icon's gradient. It is not a system color.
+    /// The violet behind the radio on the Claude FM station's thumbnail. It sits inside the
+    /// app icon's gradient. Controls don't use it: they follow the system accent color.
     static let claudeViolet = Color(red: 0x5B / 255, green: 0x48 / 255, blue: 0xC9 / 255)
 }
