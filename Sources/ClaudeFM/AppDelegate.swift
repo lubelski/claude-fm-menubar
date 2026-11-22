@@ -1,5 +1,5 @@
 import AppKit
-import ServiceManagement
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -28,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            // A link dropped on the icon opens the Add Station sheet with it filled in.
+            let drop = LinkDropView(frame: button.bounds)
+            drop.onLink = { [weak self] link in self?.settings.showAddStation(link: link) }
+            button.addSubview(drop)
         }
         menu.delegate = self
         icon.onImage = { [weak self] image in self?.statusItem.button?.image = image }
@@ -104,61 +108,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Menu
 
+    /// How many stations the submenu lists before it falls back to the ones played last.
+    private static let menuStationLimit = 10
+
     private func rebuildMenu() {
         menu.removeAllItems()
 
-        let status = NSMenuItem(title: statusLine, action: nil, keyEquivalent: "")
-        status.isEnabled = false
-        menu.addItem(status)
-
-        let playback = item(player.isActive ? "Stop" : "Play", #selector(togglePlayback))
-        if library.selected == nil { playback.action = nil }
-        menu.addItem(playback)
-        menu.addItem(VolumeMenuItem(volume: player.volume) { [weak self] in self?.player.volume = $0 })
-        menu.addItem(item("Reconnect", #selector(reconnect)))
-        menu.addItem(submenu("Stations", stationItems()))
-
-        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
+        let playerItem = NSMenuItem()
+        let playerView = NSHostingView(rootView: MenuPlayer(
+            model: model,
+            addStation: { [weak self] in self?.addStation() },
+            closeMenu: { [weak self] in self?.menu.cancelTracking() }
+        ))
+        playerView.frame.size = playerView.fittingSize
+        playerItem.view = playerView
+        menu.addItem(playerItem)
 
         menu.addItem(.separator())
-        menu.addItem(submenu("Links", [
-            item("Watch on YouTube", #selector(openStream)),
-            item("Claude FM Radio Link (clau.de/radio)", #selector(openRadioLink)),
-            item("Claude Code", #selector(openClaudeCode)),
-        ]))
+        menu.addItem(submenu("Stations", stationItems()))
 
-        let playOnClick = item("Click to Play", #selector(toggleClickToPlay))
-        playOnClick.state = clickToPlay ? .on : .off
-        let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        let stopForOther = item("Stop When Other Audio Plays", #selector(toggleStopForOtherAudio))
-        stopForOther.state = stopForOtherAudio ? .on : .off
-        var options = [playOnClick, stopForOther, login]
-        if updater.isAvailable {
-            let check = item("Check for Updates…", #selector(checkForUpdates))
-            if !updater.canCheck {
-                check.action = nil
-            }
-            let automatic = item("Update Automatically", #selector(toggleUpdatesAutomatically))
-            automatic.state = updater.updatesAutomatically ? .on : .off
-            options += [.separator(), check, automatic]
-        }
-        options += [.separator(), item("Quit Claude FM", #selector(quit), key: "q")]
-        menu.addItem(submenu("Options", options))
+        menu.addItem(.separator())
+        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
+        menu.addItem(item("Quit Claude FM", #selector(quit), key: "q"))
     }
 
+    /// A short list shows every station in the order set in Settings. A long one shows the
+    /// stations played last, so the menu stays the same height however large the list is.
     private func stationItems() -> [NSMenuItem] {
         var items: [NSMenuItem] = []
-        for station in library.stations {
-            let entry = item(station.name, #selector(selectStation(_:)))
-            entry.representedObject = station.id
-            entry.state = station.id == library.selectedID ? .on : .off
-            items.append(entry)
+        let all = library.stations
+        if all.isEmpty {
+            let none = NSMenuItem(title: "No Stations", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            items.append(none)
+        } else if all.count <= Self.menuStationLimit {
+            items += all.map(stationItem)
+        } else {
+            items.append(.sectionHeader(title: "Recently Played"))
+            items += library.recents(limit: Self.menuStationLimit).map(stationItem)
         }
-        if !items.isEmpty { items.append(.separator()) }
+        items.append(.separator())
         items.append(item("Add Station…", #selector(addStation)))
-        items.append(item("Manage Stations…", #selector(manageStations)))
+        let allStations = item("All Stations…", #selector(manageStations))
+        if !all.isEmpty { allStations.badge = NSMenuItemBadge(count: all.count) }
+        items.append(allStations)
         return items
+    }
+
+    private func stationItem(_ station: Station) -> NSMenuItem {
+        let entry = item(station.name, #selector(selectStation(_:)))
+        entry.representedObject = station.id
+        entry.state = station.id == library.selectedID ? .on : .off
+        if station.failure != nil {
+            // Gray with a warning, and still pickable: picking it is how it gets retried.
+            let title = NSMutableAttributedString(
+                string: station.name + "  ",
+                attributes: [.foregroundColor: NSColor.tertiaryLabelColor, .font: NSFont.menuFont(ofSize: 0)]
+            )
+            if let symbol = NSImage(systemSymbolName: "exclamationmark.triangle",
+                                    accessibilityDescription: "No longer available")?
+                .withSymbolConfiguration(.init(paletteColors: [.systemRed])) {
+                let attachment = NSTextAttachment()
+                attachment.image = symbol
+                title.append(NSAttributedString(attachment: attachment))
+            }
+            entry.attributedTitle = title
+        }
+        return entry
     }
 
     private var stationName: String { library.selected?.name ?? "No Stations" }
@@ -199,16 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return main
     }
 
-    private var statusLine: String {
-        switch player.state {
-        case .stopped where library.selected == nil: "No Stations"
-        case .stopped: "\(stationName): stopped"
-        case .loading: "\(stationName): connecting…"
-        case .playing: "\(stationName): playing"
-        case .failed(let reason): reason
-        }
-    }
-
     private func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let sub = NSMenu(title: title)
@@ -223,44 +229,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    @objc private func togglePlayback() { player.toggle() }
-    @objc private func reconnect() { player.reconnect() }
-    @objc private func openStream() { NSWorkspace.shared.open(player.watchURL) }
-    @objc private func openRadioLink() { NSWorkspace.shared.open(StreamPlayer.radioLink) }
-    @objc private func openClaudeCode() { NSWorkspace.shared.open(URL(string: "https://claude.com/product/claude-code")!) }
     @objc private func quit() { NSApp.terminate(nil) }
 
-    /// When true, a left click toggles playback and a right click opens the menu. Off by default.
-    private var clickToPlay: Bool {
-        get { UserDefaults.standard.bool(forKey: "clickToPlay") }
-        set { UserDefaults.standard.set(newValue, forKey: "clickToPlay") }
-    }
-
-    @objc private func toggleClickToPlay() { clickToPlay.toggle(); updateButton() }
+    /// When true, a left click toggles playback and a right click opens the menu. Off by
+    /// default. The General tab in Settings changes it.
+    private var clickToPlay: Bool { UserDefaults.standard.bool(forKey: "clickToPlay") }
 
     /// When true, playback stops once another app starts playing audio. Off by default.
-    private var stopForOtherAudio: Bool {
-        get { UserDefaults.standard.bool(forKey: "stopForOtherAudio") }
-        set { UserDefaults.standard.set(newValue, forKey: "stopForOtherAudio") }
-    }
-
-    @objc private func toggleStopForOtherAudio() { stopForOtherAudio.toggle(); updateMonitor() }
-
-    @objc private func checkForUpdates() { updater.checkForUpdates() }
-    @objc private func toggleUpdatesAutomatically() { updater.updatesAutomatically.toggle() }
-
-    @objc private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
-                try service.register()
-            }
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.messageText = "Couldn't change Launch at Login"
-            alert.runModal()
-        }
-    }
+    private var stopForOtherAudio: Bool { UserDefaults.standard.bool(forKey: "stopForOtherAudio") }
 }
