@@ -39,9 +39,21 @@ final class SettingsWindowController {
         if let tab { navigation.tab = tab }
         let window = self.window ?? makeWindow()
         self.window = window
-        // A menu bar app is not active when its menu is used, so ask for it.
-        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        activate()
+        // When this runs from a menu item, the menu is still closing, and macOS hands focus
+        // back to the app that had it. Ask again once the menu is gone.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.activate()
+        }
+    }
+
+    /// A menu bar app is not active when its menu is used. The plain activate() is a
+    /// request that macOS turns down here, which leaves the window in front but unable to
+    /// take typing until it is clicked. So insist.
+    private func activate() {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
     }
 
     /// Opens the window on the Stations tab with the Add Station sheet down.
@@ -55,7 +67,10 @@ final class SettingsWindowController {
 
     private func makeWindow() -> NSWindow {
         let host = NSHostingController(rootView: SettingsView(model: model, navigation: navigation))
+        // Lets the SwiftUI toolbar, which holds the tabs, become the window's toolbar.
+        host.sceneBridgingOptions = [.toolbars]
         let window = NSWindow(contentViewController: host)
+        window.toolbarStyle = .expanded
         window.title = "Claude FM Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
@@ -70,21 +85,43 @@ struct SettingsView: View {
     @Bindable var navigation: SettingsNavigation
 
     var body: some View {
-        TabView(selection: $navigation.tab) {
-            Tab("Stations", systemImage: "radio", value: SettingsNavigation.Tab.stations) {
-                StationsTab(model: model, navigation: navigation)
-            }
-            Tab("General", systemImage: "gearshape", value: SettingsNavigation.Tab.general) {
-                GeneralTab(model: model)
+        Group {
+            switch navigation.tab {
+            case .stations: StationsTab(model: model, navigation: navigation)
+            case .general: GeneralTab(model: model)
             }
         }
-        .padding(.top, 10)
         .frame(width: 480)
         .frame(minHeight: 420)
+        // The tabs sit in the window's toolbar, under the title. TabView draws them on the
+        // edge of a bordered box instead, and the box's border runs through the control.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Section", selection: $navigation.tab) {
+                    Text("Stations").tag(SettingsNavigation.Tab.stations)
+                    Text("General").tag(SettingsNavigation.Tab.general)
+                }
+                .labelsHidden()
+                .tabsPickerStyle()
+                .fixedSize()
+            }
+        }
         .tint(.claudeViolet)
         .sheet(item: $navigation.sheet) { request in
             AddStationSheet(model: model, request: request)
                 .tint(.claudeViolet)
+        }
+    }
+}
+
+private extension View {
+    /// The picker style made for switching sections, where the system has one.
+    @ViewBuilder
+    func tabsPickerStyle() -> some View {
+        if #available(macOS 27.0, *) {
+            pickerStyle(.tabs)
+        } else {
+            pickerStyle(.segmented)
         }
     }
 }
@@ -104,13 +141,16 @@ struct GeneralTab: View {
             Section("Playback") {
                 Toggle("Stop when other audio plays", isOn: $stopForOtherAudio)
             }
-            Section("Menu bar") {
+            Section {
                 Picker("Clicking the icon", selection: $clickToPlay) {
-                    Text("Click opens the menu, right-click plays").tag(false)
-                    Text("Click plays, right-click opens the menu").tag(true)
+                    Text("Opens the menu").tag(false)
+                    Text("Plays or stops").tag(true)
                 }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
+            } header: {
+                Text("Menu bar")
+            } footer: {
+                Text("Right-click does the other.")
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Section("System") {
                 Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin))

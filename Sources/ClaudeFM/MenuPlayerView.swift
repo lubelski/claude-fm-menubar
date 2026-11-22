@@ -49,15 +49,19 @@ struct MenuPlayerView: View {
         .padding(.top, 10)
         .padding(.bottom, 8)
         .frame(width: Self.width)
-        .tint(.claudeViolet)
+        // The menu is monochrome, like the menus around it. Only a failure has a color.
+        .tint(.primary)
     }
 
     @ViewBuilder
     private var status: some View {
         if !hasStation {
-            Button("Add a Station…", action: actions.addStation)
-            .buttonStyle(.link)
+            Button(action: actions.addStation) {
+                Text("Add a Station…").underline()
+            }
+            .buttonStyle(.plain)
             .font(.system(size: 11))
+            .foregroundStyle(.primary)
         } else {
             switch state {
             case .stopped: statusText("Stopped")
@@ -86,7 +90,7 @@ struct MenuPlayerView: View {
         } label: {
             Image(systemName: "arrow.clockwise")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(failed ? AnyShapeStyle(Color.claudeViolet) : AnyShapeStyle(.secondary))
+                .foregroundStyle(failed ? .primary : .secondary)
         }
         .buttonStyle(.plain)
         .disabled(!hasStation || state == .stopped)
@@ -101,7 +105,7 @@ struct MenuPlayerView: View {
                 switch state {
                 case .playing:
                     Image(systemName: "stop.circle")
-                        .foregroundStyle(Color.claudeViolet)
+                        .foregroundStyle(.primary)
                 case .loading:
                     // Click to cancel.
                     Circle().strokeBorder(.tertiary, lineWidth: 2.5).padding(3)

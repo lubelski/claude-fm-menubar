@@ -17,11 +17,11 @@ The top of the menu is the player. The big button plays and stops. While the str
 
 **Settings…** opens the app's window. Its General tab has Stop When Other Audio Plays, what a click on the icon does, Launch at Login, and updates.
 
-The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings back and forth like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu says why.
+The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings up and down like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu says why.
 
 <img src="docs/menubar-icon.gif" width="512" alt="The menu bar icon on light and dark menu bars, animating through connecting, playing, stopped, and stream failed">
 
-To swap the clicks, choose **Click plays, right-click opens the menu** in the General tab.
+To swap the clicks, set **Clicking the icon** to **Plays or stops** in the General tab. Right-click then opens the menu.
 
 ## How it plays
 
