@@ -89,6 +89,8 @@ struct StationsTab: View {
         .listStyle(.inset)
         .contextMenu(forSelectionType: UUID.self) { ids in
             if ids.count == 1, let id = ids.first {
+                // A failed row has no play button, so this is how to try it again from here.
+                Button("Play") { model.tune(to: id, andPlay: true) }
                 Button("Rename") { beginRename(id) }
                 if library.station(id: id)?.videoID != nil {
                     Button("Replace Link…") { navigation.sheet = .init(replacing: id) }
@@ -249,7 +251,7 @@ extension Station.Failure {
     /// The reason, short enough for a row.
     var shortReason: String {
         if reason.contains("no longer available") { return "No longer available" }
-        if reason.contains("embedded playback") { return "Doesn't allow embedded playback" }
+        if reason.contains("embedded playback") { return "Can't be embedded" }
         return reason.trimmingCharacters(in: CharacterSet(charactersIn: "."))
     }
 }
