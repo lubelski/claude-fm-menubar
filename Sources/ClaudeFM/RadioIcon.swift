@@ -96,9 +96,10 @@ final class RadioIcon {
         case .on:
             return Self.onPose
         case .searching:
-            // Swing the antenna back and forth, like hunting for a station.
+            // Swing the antenna back and forth, like hunting for a station. It swings down
+            // from where it rests, because there is no room above: see `image`.
             let swing = reduceMotion ? 0 : CGFloat(sin(2 * .pi * t / 1.6))
-            return Pose(antenna: .init(angle: 34 + 20 * swing, reach: 1), alpha: 1)
+            return Pose(antenna: .init(angle: 14 + 20 * swing, reach: 1), alpha: 1)
         case .trouble:
             // Sagging and shorter, with a short shake every couple of seconds.
             var angle: CGFloat = 8
@@ -112,9 +113,13 @@ final class RadioIcon {
 
     // MARK: - Drawing
 
-    /// The icon is 18pt wide like the radio, with 2pt of room above and below so a raised
-    /// antenna fits. The radio stays centered.
+    /// The icon is 18pt wide like the radio and 22pt tall. The radio's body is centered in
+    /// it, so the body lines up with the other menu bar icons. The antenna takes the room
+    /// above, and at rest its tip just reaches the top edge.
     static let size = NSSize(width: 18, height: 22)
+
+    /// The middle of the body in the drawing's coordinates. Keep in step with RadioDrawing.
+    private static let bodyMidY: CGFloat = 270 + 360 / 2
 
     static func image(_ pose: Pose) -> NSImage {
         let image = NSImage(size: size, flipped: false) { _ in
@@ -123,9 +128,9 @@ final class RadioIcon {
             context.setAlpha(pose.alpha)
             context.beginTransparencyLayer(auxiliaryInfo: nil)
             let scale = size.width / RadioDrawing.bounds.width
-            context.translateBy(x: 0, y: (size.height - size.width) / 2)
+            context.translateBy(x: 0, y: size.height / 2)
             context.scaleBy(x: scale, y: scale)
-            context.translateBy(x: -RadioDrawing.bounds.minX, y: -RadioDrawing.bounds.minY)
+            context.translateBy(x: -RadioDrawing.bounds.minX, y: -bodyMidY)
             context.setFillColor(.black)
             RadioDrawing.draw(in: context, antenna: pose.antenna)
             context.endTransparencyLayer()

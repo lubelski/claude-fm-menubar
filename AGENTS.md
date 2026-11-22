@@ -5,6 +5,7 @@
 A PR that changes anything visual includes evidence of how it looks: screenshots, a screen recording, or rendered images in the PR body. This covers the menu bar icon, the app icon, menus, and any window. When it changes something that already exists, show before and after.
 
 - **Menu bar icon:** run `./scripts/render-menubar-icon.sh`. It draws the icon through every player state with the app's own code, on light and dark menu bars, into `docs/menubar-icon.gif` and `docs/menubar-icon.png`. Commit both.
+- **Menu player:** run `./scripts/render-menu-player.sh`. It draws the player at the top of the menu in every state, on light and dark, into `docs/menu-player.png`. Commit it.
 - **App icon:** run `./scripts/render-icon.sh`, and update `docs/icon.png` with a picture of the compiled icon.
 - **Menus and windows:** take a screenshot.
 

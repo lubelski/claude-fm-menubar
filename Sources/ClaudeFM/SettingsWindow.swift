@@ -9,6 +9,7 @@ final class SettingsNavigation {
     enum Tab: Hashable {
         case stations
         case general
+        case about
     }
 
     /// A request to show the Add Station sheet.
@@ -39,9 +40,21 @@ final class SettingsWindowController {
         if let tab { navigation.tab = tab }
         let window = self.window ?? makeWindow()
         self.window = window
-        // A menu bar app is not active when its menu is used, so ask for it.
-        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        activate()
+        // When this runs from a menu item, the menu is still closing, and macOS hands focus
+        // back to the app that had it. Ask again once the menu is gone.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.activate()
+        }
+    }
+
+    /// A menu bar app is not active when its menu is used. The plain activate() is a
+    /// request that macOS turns down here, which leaves the window in front but unable to
+    /// take typing until it is clicked. So insist.
+    private func activate() {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
     }
 
     /// Opens the window on the Stations tab with the Add Station sheet down.
@@ -55,7 +68,10 @@ final class SettingsWindowController {
 
     private func makeWindow() -> NSWindow {
         let host = NSHostingController(rootView: SettingsView(model: model, navigation: navigation))
+        // Lets the SwiftUI toolbar, which holds the tabs, become the window's toolbar.
+        host.sceneBridgingOptions = [.toolbars]
         let window = NSWindow(contentViewController: host)
+        window.toolbarStyle = .expanded
         window.title = "Claude FM Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
@@ -70,21 +86,51 @@ struct SettingsView: View {
     @Bindable var navigation: SettingsNavigation
 
     var body: some View {
-        TabView(selection: $navigation.tab) {
-            Tab("Stations", systemImage: "radio", value: SettingsNavigation.Tab.stations) {
-                StationsTab(model: model, navigation: navigation)
-            }
-            Tab("General", systemImage: "gearshape", value: SettingsNavigation.Tab.general) {
-                GeneralTab(model: model)
+        Group {
+            switch navigation.tab {
+            case .stations: StationsTab(model: model, navigation: navigation)
+            case .general: GeneralTab(model: model)
+            case .about: AboutTab()
             }
         }
-        .padding(.top, 10)
         .frame(width: 480)
         .frame(minHeight: 420)
-        .tint(.claudeViolet)
+        // The tabs sit in the window's toolbar, under the title. TabView draws them on the
+        // edge of a bordered box instead, and the box's border runs through the control.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Section", selection: $navigation.tab) {
+                    tabLabel("Stations").tag(SettingsNavigation.Tab.stations)
+                    tabLabel("General").tag(SettingsNavigation.Tab.general)
+                    tabLabel("About").tag(SettingsNavigation.Tab.about)
+                }
+                .labelsHidden()
+                .tabsPickerStyle()
+                .controlSize(.large)
+                .fixedSize()
+            }
+        }
         .sheet(item: $navigation.sheet) { request in
             AddStationSheet(model: model, request: request)
-                .tint(.claudeViolet)
+        }
+    }
+}
+
+/// A tab's label with room around its text. The picker sizes each tab to its label and
+/// ignores padding on it, so the room is made of spaces that don't collapse.
+private func tabLabel(_ title: String) -> Text {
+    let space = "\u{2002}"
+    return Text(space + title + space)
+}
+
+private extension View {
+    /// The picker style made for switching sections, where the system has one.
+    @ViewBuilder
+    func tabsPickerStyle() -> some View {
+        if #available(macOS 27.0, *) {
+            pickerStyle(.tabs)
+        } else {
+            pickerStyle(.segmented)
         }
     }
 }
@@ -104,13 +150,16 @@ struct GeneralTab: View {
             Section("Playback") {
                 Toggle("Stop when other audio plays", isOn: $stopForOtherAudio)
             }
-            Section("Menu bar") {
+            Section {
                 Picker("Clicking the icon", selection: $clickToPlay) {
-                    Text("Click opens the menu, right-click plays").tag(false)
-                    Text("Click plays, right-click opens the menu").tag(true)
+                    Text("Opens the menu").tag(false)
+                    Text("Plays or stops").tag(true)
                 }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
+            } header: {
+                Text("Menu bar")
+            } footer: {
+                Text("Right-click does the other.")
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Section("System") {
                 Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
@@ -166,5 +215,48 @@ struct GeneralTab: View {
             loginError = error.localizedDescription
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+}
+
+/// What the app is, which version this is, and where it comes from.
+struct AboutTab: View {
+    private static let repository = URL(string: "https://github.com/lubelski/claude-fm-menubar")!
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+                .accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text("Claude FM").font(.title2.weight(.semibold))
+                Text(versionLine).font(.callout).foregroundStyle(.secondary)
+            }
+            Text("A menu bar radio for Claude FM, Anthropic's lo-fi stream on YouTube, and for any other YouTube stream you add.")
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 340)
+            HStack(spacing: 18) {
+                Link("Source on GitHub", destination: Self.repository)
+                Link("clau.de/radio", destination: StreamPlayer.radioLink)
+            }
+            Spacer(minLength: 0)
+            Text("A personal project, not affiliated with Anthropic. The music belongs to the streams and their artists. MIT license.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360)
+        }
+        .padding(.top, 36)
+        .padding(.bottom, 24)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var versionLine: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "development"
+        return "Version \(version)" + ((info?["CFBundleVersion"] as? String).map { " (\($0))" } ?? "")
     }
 }

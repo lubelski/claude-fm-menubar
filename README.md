@@ -6,14 +6,22 @@ A macOS menu bar app that plays [Claude FM](https://clau.de/radio), Anthropic's 
 
 This is a personal project, not affiliated with Anthropic. The music belongs to the stream and its artists.
 
-- **Click** the radio icon for the menu: play/stop, volume, reconnect, a **Stations** submenu, a **Links** submenu, and an **Options** submenu with Click to Play, Stop When Other Audio Plays, Launch at Login, and Quit. A release build also has Check for Updates… and Update Automatically there.
+- **Click** the radio icon for the menu.
 - **Right-click** (or Control-click) to play or stop.
 
-The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings back and forth like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu's status line says why.
+<img src="docs/menu.png" width="420" alt="The menu: the station name and Playing, three round buttons for reconnect, stop and open on YouTube, a volume slider, then Stations with its submenu open, Settings, and Quit">
+
+The top of the menu is the player. The big button plays and stops. While the stream is connecting it spins, and a click cancels. The arrow on the left reconnects, which looks the stream up again. The button on the right opens the video on YouTube. Under them is the volume.
+
+**Stations** opens a submenu to switch station. With up to 10 stations it lists them all, in the order set in Settings. With more, it lists the 10 you played last, so the menu stays the same height however long the list gets. **All Stations…** opens the full list.
+
+**Settings…** opens the app's window. Its General tab has Stop When Other Audio Plays, what a click on the icon does, Launch at Login, and updates. Its About tab has the version and a link to the source.
+
+The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings up and down like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu says why.
 
 <img src="docs/menubar-icon.gif" width="512" alt="The menu bar icon on light and dark menu bars, animating through connecting, playing, stopped, and stream failed">
 
-Turn on **Options > Click to Play** to swap them: click to play, right-click for the menu.
+To swap the clicks, set **Clicking the icon** to **Plays or stops** in the General tab. Right-click then opens the menu.
 
 ## How it plays
 
@@ -27,11 +35,11 @@ Stopping releases the stream. Playing again reloads it, so playback starts at th
 
 Claude FM is put in the station list on first launch. After that it is a station like any other: you can rename it, move it, or remove it.
 
-**Settings…** in the menu opens the app's window. Its Stations tab is the list.
+The Stations tab of the settings window is the list.
 
 <img src="docs/settings-stations.png" width="480" alt="The Stations tab: a search field, then Claude FM, two YouTube stations with thumbnails, and a grayed station marked No longer available with a Replace Link button">
 
-- **Add:** press **+**, or choose **Stations > Add Station…** in the menu. You can also drag a link from a browser onto the list, or paste one with the list focused.
+- **Add:** press **+**, or choose **Stations > Add Station…** in the menu. You can also drag a link from a browser onto the list or onto the menu bar icon, or paste one with the list focused.
 - **Play:** press the play button on a row.
 - **Rename:** double-click a row.
 - **Reorder:** drag a row. Dragging is off while you search.
@@ -47,7 +55,7 @@ The Add Station sheet takes one YouTube link. If the clipboard already holds one
 
 A station you add points at one video. When a live stream's broadcast restarts, it gets a new video ID and the old link stops working. The Claude FM station is different: it follows `https://clau.de/radio` to the current broadcast each time it loads.
 
-The app never checks stations in the background, so the list can be very large at no cost. It learns that a link died only when you play it. The row then turns gray and shows the date. **Replace Link…** opens the sheet to give the station a new link. If the station plays again later, the mark clears on its own.
+The app never checks stations in the background, so the list can be very large at no cost. It learns that a link died only when you play it. The station then turns gray in the menu and in the list, where it also shows the date. **Replace Link…** opens the sheet to give the station a new link. If the station plays again later, the mark clears on its own.
 
 An ordinary video loops when it ends. Videos that don't allow embedded playback can't be added.
 
@@ -67,7 +75,7 @@ The app checks Core Audio's per-process list once a second. Its own audio comes 
 swift test                     # the station list, its file, and link parsing
 ```
 
-Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr. `CLAUDE_FM_OPEN` opens the settings window at launch on `stations`, `general`, or `add-station`. With `add-station`, `CLAUDE_FM_LINK` is the link to start with.
+Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr. `CLAUDE_FM_OPEN` opens the settings window at launch on `stations`, `general`, `about`, or `add-station`. With `add-station`, `CLAUDE_FM_LINK` is the link to start with.
 
 The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh` compiles. Its artwork comes from `RadioDrawing.swift`, the same routine that draws the menu bar icon. After changing the drawing, redraw the artwork:
 
@@ -77,6 +85,12 @@ The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh`
 
 `docs/icon.png` is a picture of the compiled icon for this README. It is not used by the build.
 
+`docs/menu-player.png` shows the player at the top of the menu in each state. It is drawn by the app's own view code. After changing how the player looks, redraw it:
+
+```sh
+./scripts/render-menu-player.sh
+```
+
 `docs/menubar-icon.gif` and `docs/menubar-icon.png` show the menu bar icon in each player state. They are drawn by the app's own icon code. After changing how the menu bar icon looks or moves, redraw them:
 
 ```sh
@@ -85,7 +99,7 @@ The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh`
 
 ## Releases and updates
 
-A release build updates itself with [Sparkle](https://sparkle-project.org). It checks the feed about once a day, downloads a newer build, verifies its signature, and relaunches into it. While the stream is playing, the relaunch waits until playback stops. **Options > Update Automatically** turns this off.
+A release build updates itself with [Sparkle](https://sparkle-project.org). It checks the feed about once a day, downloads a newer build, verifies its signature, and relaunches into it. While the stream is playing, the relaunch waits until playback stops. **Update automatically** in the General tab turns this off.
 
 ```sh
 ./scripts/release.sh 1.2.0            # build, sign, notarize, and publish v1.2.0 from main
