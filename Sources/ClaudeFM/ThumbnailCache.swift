@@ -73,6 +73,7 @@ struct StationThumbnail: View {
 }
 
 extension Color {
-    /// The violet of the app icon.
+    /// The app's accent. It is the violet the designs use, which sits inside the app
+    /// icon's gradient. It is not a system color.
     static let claudeViolet = Color(red: 0x5B / 255, green: 0x48 / 255, blue: 0xC9 / 255)
 }

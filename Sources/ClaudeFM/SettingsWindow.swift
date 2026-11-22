@@ -9,6 +9,7 @@ final class SettingsNavigation {
     enum Tab: Hashable {
         case stations
         case general
+        case about
     }
 
     /// A request to show the Add Station sheet.
@@ -89,6 +90,7 @@ struct SettingsView: View {
             switch navigation.tab {
             case .stations: StationsTab(model: model, navigation: navigation)
             case .general: GeneralTab(model: model)
+            case .about: AboutTab()
             }
         }
         .frame(width: 480)
@@ -98,11 +100,13 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Section", selection: $navigation.tab) {
-                    Text("Stations").tag(SettingsNavigation.Tab.stations)
-                    Text("General").tag(SettingsNavigation.Tab.general)
+                    tabLabel("Stations").tag(SettingsNavigation.Tab.stations)
+                    tabLabel("General").tag(SettingsNavigation.Tab.general)
+                    tabLabel("About").tag(SettingsNavigation.Tab.about)
                 }
                 .labelsHidden()
                 .tabsPickerStyle()
+                .controlSize(.large)
                 .fixedSize()
             }
         }
@@ -112,6 +116,13 @@ struct SettingsView: View {
                 .tint(.claudeViolet)
         }
     }
+}
+
+/// A tab's label with room around its text. The picker sizes each tab to its label and
+/// ignores padding on it, so the room is made of spaces that don't collapse.
+private func tabLabel(_ title: String) -> Text {
+    let space = "\u{2002}"
+    return Text(space + title + space)
 }
 
 private extension View {
@@ -206,5 +217,48 @@ struct GeneralTab: View {
             loginError = error.localizedDescription
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+}
+
+/// What the app is, which version this is, and where it comes from.
+struct AboutTab: View {
+    private static let repository = URL(string: "https://github.com/lubelski/claude-fm-menubar")!
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+                .accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text("Claude FM").font(.title2.weight(.semibold))
+                Text(versionLine).font(.callout).foregroundStyle(.secondary)
+            }
+            Text("A menu bar radio for Claude FM, Anthropic's lo-fi stream on YouTube, and for any other YouTube stream you add.")
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 340)
+            HStack(spacing: 18) {
+                Link("Source on GitHub", destination: Self.repository)
+                Link("clau.de/radio", destination: StreamPlayer.radioLink)
+            }
+            Spacer(minLength: 0)
+            Text("A personal project, not affiliated with Anthropic. The music belongs to the streams and their artists. MIT license.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360)
+        }
+        .padding(.top, 36)
+        .padding(.bottom, 24)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var versionLine: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "development"
+        return "Version \(version)" + ((info?["CFBundleVersion"] as? String).map { " (\($0))" } ?? "")
     }
 }

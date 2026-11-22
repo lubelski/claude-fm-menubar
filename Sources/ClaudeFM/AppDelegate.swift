@@ -58,7 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = updater
 
         // For testing from a terminal: CLAUDE_FM_AUTOPLAY=1 starts playback at launch, and
-        // CLAUDE_FM_OPEN opens the settings window on "stations", "general" or "add-station".
+        // CLAUDE_FM_OPEN opens the settings window on "stations", "general", "about" or
+        // "add-station".
         let environment = ProcessInfo.processInfo.environment
         if environment["CLAUDE_FM_AUTOPLAY"] == "1" {
             player.play()
@@ -66,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch environment["CLAUDE_FM_OPEN"] {
         case "stations": settings.show(tab: .stations)
         case "general": settings.show(tab: .general)
+        case "about": settings.show(tab: .about)
         case "add-station": settings.showAddStation(link: environment["CLAUDE_FM_LINK"])
         default: break
         }

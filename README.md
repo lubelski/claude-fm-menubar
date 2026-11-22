@@ -15,7 +15,7 @@ The top of the menu is the player. The big button plays and stops. While the str
 
 **Stations** opens a submenu to switch station. With up to 10 stations it lists them all, in the order set in Settings. With more, it lists the 10 you played last, so the menu stays the same height however long the list gets. **All Stations…** opens the full list.
 
-**Settings…** opens the app's window. Its General tab has Stop When Other Audio Plays, what a click on the icon does, Launch at Login, and updates.
+**Settings…** opens the app's window. Its General tab has Stop When Other Audio Plays, what a click on the icon does, Launch at Login, and updates. Its About tab has the version and a link to the source.
 
 The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings up and down like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu says why.
 
@@ -75,7 +75,7 @@ The app checks Core Audio's per-process list once a second. Its own audio comes 
 swift test                     # the station list, its file, and link parsing
 ```
 
-Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr. `CLAUDE_FM_OPEN` opens the settings window at launch on `stations`, `general`, or `add-station`. With `add-station`, `CLAUDE_FM_LINK` is the link to start with.
+Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr. `CLAUDE_FM_OPEN` opens the settings window at launch on `stations`, `general`, `about`, or `add-station`. With `add-station`, `CLAUDE_FM_LINK` is the link to start with.
 
 The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh` compiles. Its artwork comes from `RadioDrawing.swift`, the same routine that draws the menu bar icon. After changing the drawing, redraw the artwork:
 
