@@ -104,9 +104,10 @@ A release build updates itself with [Sparkle](https://sparkle-project.org). It c
 ```sh
 ./scripts/release.sh 1.2.0            # build, sign, notarize, and publish v1.2.0 from main
 ./scripts/release.sh 1.2.0 --dry-run  # build the files into build/release and publish nothing
+./scripts/release.sh --check          # say whether this Mac can release now, and change nothing
 ```
 
-The script publishes a GitHub Release with two files: the zipped app and `appcast.xml`, the feed. Installed copies read the feed from the latest release, so publishing the release ships the update. The one-time setup (a Developer ID certificate, a notarization login, and a Sparkle signing key) is described at the top of the script.
+The script publishes a GitHub Release with two files: the zipped app and `appcast.xml`, the feed. Installed copies read the feed from the latest release, so publishing the release ships the update. The one-time setup (a Developer ID certificate, notarization credentials, and a Sparkle signing key) is described at the top of the script. With an App Store Connect API key in `~/.appstoreconnect/notary.conf`, notarization works with the screen locked. The `AIMeter` notarytool profile in the Keychain works only while the screen is unlocked.
 
 - The version is the release tag. The build number is the commit count, and Sparkle compares build numbers, so releases are built from `main`.
 - A build from `bundle.sh` alone has no feed and never updates itself, so a development copy is not replaced by a release.
