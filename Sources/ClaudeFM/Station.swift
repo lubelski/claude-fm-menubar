@@ -60,19 +60,23 @@ struct Station: Codable, Equatable, Identifiable {
         return candidate
     }
 
-    /// The video's title, or nil if it can't be found. YouTube's oEmbed endpoint has it for
-    /// most videos. For the rest, it is read from the watch page.
-    static func fetchTitle(videoID: String) async -> String? {
+    /// A video's title and channel, or nil if YouTube doesn't know the video. The oEmbed
+    /// endpoint has both for most videos. For the rest, the title is read from the watch page.
+    static func lookup(videoID: String) async -> VideoInfo? {
         let watchURL = "https://www.youtube.com/watch?v=\(videoID)"
         var components = URLComponents(string: "https://www.youtube.com/oembed")!
         components.queryItems = [
             URLQueryItem(name: "url", value: watchURL),
             URLQueryItem(name: "format", value: "json"),
         ]
-        struct Reply: Decodable { let title: String? }
+        struct Reply: Decodable {
+            let title: String?
+            let author_name: String?
+        }
         if let data = await fetch(components.url!),
-           let title = clean((try? JSONDecoder().decode(Reply.self, from: data))?.title) {
-            return title
+           let reply = try? JSONDecoder().decode(Reply.self, from: data),
+           let title = clean(reply.title) {
+            return VideoInfo(title: title, channel: clean(reply.author_name))
         }
 
         guard let data = await fetch(URL(string: watchURL)!),
@@ -84,7 +88,7 @@ struct Station: Codable, Equatable, Identifiable {
         for (entity, character) in [("&quot;", "\""), ("&#39;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")] {
             title = title.replacingOccurrences(of: entity, with: character)
         }
-        return clean(title)
+        return clean(title).map { VideoInfo(title: $0, channel: nil) }
     }
 
     private static func fetch(_ url: URL) async -> Data? {
@@ -99,4 +103,10 @@ struct Station: Codable, Equatable, Identifiable {
         guard let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
         return title
     }
+}
+
+/// What YouTube says about a video.
+struct VideoInfo: Equatable, Sendable {
+    var title: String
+    var channel: String?
 }

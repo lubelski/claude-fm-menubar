@@ -3,13 +3,16 @@ import ServiceManagement
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let player = StreamPlayer()
-    private let library = StationLibrary()
+    private let model = AppModel()
+    private lazy var settings = SettingsWindowController(model: model)
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let otherAudio = OtherAudioMonitor()
     private let icon = RadioIcon()
-    private lazy var updater = AppUpdater { [weak self] in self?.player.isActive != true }
+
+    private var player: StreamPlayer { model.player }
+    private var library: StationLibrary { model.library }
+    private var updater: AppUpdater { model.updater }
 
     private func updateMonitor() {
         if stopForOtherAudio && player.isActive {
@@ -28,25 +31,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.delegate = self
         icon.onImage = { [weak self] image in self?.statusItem.button?.image = image }
-        player.onStateChange = { [weak self] state in
-            NSLog("Claude FM state: %@", String(describing: state))
-            self?.recordOutcome(of: state)
+        model.onPlayerStateChange = { [weak self] in
             self?.updateButton()
             self?.updateMonitor()
-            self?.updater.installPendingUpdate()
         }
+        // The General tab writes its switches to UserDefaults.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateButton()
+                self?.updateMonitor()
+            }
+        }
+        NSApp.mainMenu = makeMainMenu()
         otherAudio.onOtherAudioStarted = { [weak self] in
             NSLog("Claude FM: stopping because another app started playing")
             self?.player.stop()
         }
-        player.tune(to: library.selected?.source, andPlay: false)
         updateButton()
         // Start the updater at launch, so it checks on its own schedule.
         _ = updater
 
-        // For testing from a terminal: CLAUDE_FM_AUTOPLAY=1 starts playback at launch.
-        if ProcessInfo.processInfo.environment["CLAUDE_FM_AUTOPLAY"] == "1" {
+        // For testing from a terminal: CLAUDE_FM_AUTOPLAY=1 starts playback at launch, and
+        // CLAUDE_FM_OPEN opens the settings window on "stations", "general" or "add-station".
+        let environment = ProcessInfo.processInfo.environment
+        if environment["CLAUDE_FM_AUTOPLAY"] == "1" {
             player.play()
+        }
+        switch environment["CLAUDE_FM_OPEN"] {
+        case "stations": settings.show(tab: .stations)
+        case "general": settings.show(tab: .general)
+        case "add-station": settings.showAddStation(link: environment["CLAUDE_FM_LINK"])
+        default: break
         }
     }
 
@@ -62,20 +79,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             sender.performClick(nil)
         } else {
             player.toggle()
-        }
-    }
-
-    /// Stations are never checked in the background. What is known about one comes from
-    /// playing it: when it last played, or why it couldn't.
-    private func recordOutcome(of state: StreamPlayer.State) {
-        guard let id = library.selectedID else { return }
-        switch state {
-        case .playing:
-            library.markPlayed(id: id)
-        case .failed(let reason) where player.failureIsPermanent:
-            library.markFailed(id: id, reason: reason)
-        default:
-            break
         }
     }
 
@@ -115,6 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Reconnect", #selector(reconnect)))
         menu.addItem(submenu("Stations", stationItems()))
 
+        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
+
         menu.addItem(.separator())
         menu.addItem(submenu("Links", [
             item("Watch on YouTube", #selector(openStream)),
@@ -151,55 +156,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             items.append(entry)
         }
         if !items.isEmpty { items.append(.separator()) }
-        items.append(item("Add Station from Clipboard", #selector(addStationFromClipboard)))
-        if let current = library.selected {
-            items.append(item("Remove “\(current.name)”", #selector(removeCurrentStation)))
-        }
+        items.append(item("Add Station…", #selector(addStation)))
+        items.append(item("Manage Stations…", #selector(manageStations)))
         return items
     }
 
     private var stationName: String { library.selected?.name ?? "No Stations" }
 
-    private func tune(to id: UUID?, andPlay: Bool) {
-        library.select(id)
-        player.tune(to: library.selected?.source, andPlay: andPlay)
-        updateButton()
-    }
-
     @objc private func selectStation(_ sender: NSMenuItem) {
-        tune(to: sender.representedObject as? UUID, andPlay: true)
-    }
-
-    @objc private func addStationFromClipboard() {
-        guard let text = NSPasteboard.general.string(forType: .string),
-              let videoID = Station.videoID(from: text)
-        else {
-            let alert = NSAlert()
-            alert.messageText = "No YouTube link on the clipboard"
-            alert.informativeText = "Copy the link to a YouTube video or live stream, then choose Add Station from Clipboard again."
-            NSApp.activate()
-            alert.runModal()
-            return
-        }
-        // Show the ID until the title arrives, so the station is usable right away.
-        let placeholder = "YouTube \(videoID)"
-        let station = library.add(Station(name: placeholder, videoID: videoID))
-        if station.name == placeholder {
-            Task {
-                guard let title = await Station.fetchTitle(videoID: videoID) else { return }
-                library.rename(id: station.id, to: title)
-                updateButton()
-            }
-        }
-        tune(to: station.id, andPlay: true)
-    }
-
-    @objc private func removeCurrentStation() {
-        guard let current = library.selected else { return }
-        let wasActive = player.isActive
-        library.remove(ids: [current.id])
-        player.tune(to: library.selected?.source, andPlay: wasActive && library.selected != nil)
+        model.tune(to: sender.representedObject as? UUID, andPlay: true)
         updateButton()
+    }
+
+    @objc private func addStation() { settings.showAddStation() }
+    @objc private func manageStations() { settings.show(tab: .stations) }
+    @objc private func openSettings() { settings.show() }
+
+    /// A menu bar app shows no main menu, but its key equivalents still work. Without
+    /// these, the settings window has no Paste, Close or Select All.
+    private func makeMainMenu() -> NSMenu {
+        let main = NSMenu()
+        let app = NSMenu()
+        app.addItem(item("Settings…", #selector(openSettings), key: ","))
+        app.addItem(item("Quit Claude FM", #selector(quit), key: "q"))
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+        edit.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+        edit.addItem(.separator())
+        edit.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        edit.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        edit.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        edit.addItem(NSMenuItem(title: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "\u{8}"))
+        edit.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        let window = NSMenu(title: "Window")
+        window.addItem(NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        window.addItem(NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
+        for submenu in [app, edit, window] {
+            let parent = NSMenuItem()
+            parent.submenu = submenu
+            main.addItem(parent)
+        }
+        return main
     }
 
     private var statusLine: String {

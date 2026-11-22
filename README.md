@@ -25,15 +25,33 @@ Stopping releases the stream. Playing again reloads it, so playback starts at th
 
 ## Stations
 
-Claude FM is put in the station list on first launch. After that it is a station like any other. To add another, copy the link to a YouTube video or live stream and choose **Stations > Add Station from Clipboard**. The app names the station after the video's title and starts playing it. Picking a station in the submenu switches to it, and the choice is remembered. **Stations > Remove** takes the selected station out of the list, and the list can be emptied.
+Claude FM is put in the station list on first launch. After that it is a station like any other: you can rename it, move it, or remove it.
 
-A station you add points at one video. When a live stream's broadcast restarts, it gets a new video ID and the old link stops working. The app then reports that the stream is no longer available. Remove the station and add the new link. The Claude FM station is different: it follows `https://clau.de/radio` to the current broadcast each time it loads.
+**Settings…** in the menu opens the app's window. Its Stations tab is the list.
 
-The app never checks stations in the background. It learns that a link died only when you play it, and it clears that mark the next time the station plays.
+<img src="docs/settings-stations.png" width="480" alt="The Stations tab: a search field, then Claude FM, two YouTube stations with thumbnails, and a grayed station marked No longer available with a Replace Link button">
 
-An ordinary video loops when it ends. Videos that don't allow embedded playback can't be played.
+- **Add:** press **+**, or choose **Stations > Add Station…** in the menu. You can also drag a link from a browser onto the list, or paste one with the list focused.
+- **Play:** press the play button on a row.
+- **Rename:** double-click a row.
+- **Reorder:** drag a row. Dragging is off while you search.
+- **Remove:** select rows and press **−** or Delete. The list can be emptied, and **Restore Claude FM** brings the first station back.
 
-The list is kept in `~/Library/Application Support/Claude FM/stations.json`. Earlier versions kept it in the app's preferences, and the first launch of this version copies it over.
+### Adding a station
+
+The Add Station sheet takes one YouTube link. If the clipboard already holds one, it is filled in. The app looks the link up, then loads it in a hidden player to see that it really plays. **Add Station** stays disabled until it does, so a bad link never reaches the list. The play button on the thumbnail lets you listen first. Your current station pauses while you do.
+
+<img src="docs/settings-add-station.png" width="480" alt="The Add Station sheet with a link, a preview showing the video's thumbnail, title and channel, a LIVE badge, and Plays in Claude FM">
+
+### When a link dies
+
+A station you add points at one video. When a live stream's broadcast restarts, it gets a new video ID and the old link stops working. The Claude FM station is different: it follows `https://clau.de/radio` to the current broadcast each time it loads.
+
+The app never checks stations in the background, so the list can be very large at no cost. It learns that a link died only when you play it. The row then turns gray and shows the date. **Replace Link…** opens the sheet to give the station a new link. If the station plays again later, the mark clears on its own.
+
+An ordinary video loops when it ends. Videos that don't allow embedded playback can't be added.
+
+The list is kept in `~/Library/Application Support/Claude FM/stations.json`. Thumbnails are fetched as rows scroll into view and kept in `~/Library/Caches/dev.lubelski.ClaudeFM/thumbnails`.
 
 ## Stop When Other Audio Plays
 
@@ -49,7 +67,7 @@ The app checks Core Audio's per-process list once a second. Its own audio comes 
 swift test                     # the station list, its file, and link parsing
 ```
 
-Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr.
+Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr. `CLAUDE_FM_OPEN` opens the settings window at launch on `stations`, `general`, or `add-station`. With `add-station`, `CLAUDE_FM_LINK` is the link to start with.
 
 The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh` compiles. Its artwork comes from `RadioDrawing.swift`, the same routine that draws the menu bar icon. After changing the drawing, redraw the artwork:
 

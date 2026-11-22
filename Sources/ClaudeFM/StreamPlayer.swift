@@ -137,21 +137,8 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         config.mediaTypesRequiringUserActionForPlayback = []
         config.userContentController.add(WeakHandler(self), name: "bridge")
 
-        let frame = NSRect(x: 0, y: 0, width: 320, height: 180)
-        let webView = WKWebView(frame: frame, configuration: config)
+        let (webView, window) = HiddenWebView.make(configuration: config)
         webView.navigationDelegate = self
-
-        // WebKit throttles media in views that are not in a window, so host the view in a
-        // transparent window that never takes focus or shows up in the window cycle.
-        let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.alphaValue = 0
-        window.ignoresMouseEvents = true
-        window.level = .init(rawValue: NSWindow.Level.normal.rawValue - 1)
-        window.collectionBehavior = [.transient, .ignoresCycle, .canJoinAllSpaces, .stationary]
-        window.contentView = webView
-        window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFrontRegardless()
 
         self.webView = webView
         self.window = window
@@ -159,8 +146,7 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         hasPlayedOnce = false
 
         // The embed refuses to play without a referring origin, so give the page one.
-        webView.loadHTMLString(Self.html(videoID: videoID, volume: volume),
-                               baseURL: URL(string: "https://claude-fm-menubar.localhost/"))
+        webView.loadHTMLString(Self.html(videoID: videoID, volume: volume), baseURL: HiddenWebView.pageOrigin)
     }
 
     private func tearDown() {
@@ -229,7 +215,7 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         state = .failed(error.localizedDescription)
     }
 
-    private static func describe(errorCode: Int?) -> String {
+    static func describe(errorCode: Int?) -> String {
         switch errorCode {
         case 2: "YouTube rejected the video ID."
         case 5: "The player could not play this stream."
@@ -263,14 +249,5 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         <script src="https://www.youtube.com/iframe_api"></script>
         </body></html>
         """
-    }
-}
-
-/// WKUserContentController retains its handlers. This breaks the cycle with the player.
-private final class WeakHandler: NSObject, WKScriptMessageHandler {
-    weak var target: (any WKScriptMessageHandler)?
-    init(_ target: any WKScriptMessageHandler) { self.target = target }
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        target?.userContentController(controller, didReceive: message)
     }
 }
