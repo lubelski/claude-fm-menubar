@@ -19,17 +19,21 @@ Turn on **Options > Click to Play** to swap them: click to play, right-click for
 
 Claude FM is published only as a YouTube live stream. The app plays it through YouTube's embedded IFrame player, in a web view that is never shown. That keeps it to official YouTube playback with no extra dependencies.
 
-The stream's video ID changes when the broadcast restarts. On first play, and on **Reconnect**, the app follows `https://clau.de/radio` to find the current one. If that fails, it falls back to the ID built into `StreamPlayer.swift`.
+The Claude FM stream's video ID changes when the broadcast restarts. On first play, and on **Reconnect**, the app follows `https://clau.de/radio` to find the current one. If that fails, it falls back to the ID built into `StreamPlayer.swift`.
 
 Stopping releases the stream. Playing again reloads it, so playback starts at the live edge instead of where you stopped.
 
 ## Stations
 
-Claude FM is the built-in station. To add another, copy the link to a YouTube video or live stream and choose **Stations > Add Station from Clipboard**. The app names the station after the video's title and starts playing it. Picking a station in the submenu switches to it, and the choice is remembered.
+Claude FM is put in the station list on first launch. After that it is a station like any other. To add another, copy the link to a YouTube video or live stream and choose **Stations > Add Station from Clipboard**. The app names the station after the video's title and starts playing it. Picking a station in the submenu switches to it, and the choice is remembered. **Stations > Remove** takes the selected station out of the list, and the list can be emptied.
 
-A station you add points at one video. When a live stream's broadcast restarts, it gets a new video ID and the old link stops working. The app then reports that the stream is no longer available. Choose **Stations > Remove** while the station is selected, and add the new link.
+A station you add points at one video. When a live stream's broadcast restarts, it gets a new video ID and the old link stops working. The app then reports that the stream is no longer available. Remove the station and add the new link. The Claude FM station is different: it follows `https://clau.de/radio` to the current broadcast each time it loads.
+
+The app never checks stations in the background. It learns that a link died only when you play it, and it clears that mark the next time the station plays.
 
 An ordinary video loops when it ends. Videos that don't allow embedded playback can't be played.
+
+The list is kept in `~/Library/Application Support/Claude FM/stations.json`. Earlier versions kept it in the app's preferences, and the first launch of this version copies it over.
 
 ## Stop When Other Audio Plays
 
@@ -42,6 +46,7 @@ The app checks Core Audio's per-process list once a second. Its own audio comes 
 ```sh
 ./scripts/bundle.sh            # builds build/Claude FM.app
 ./scripts/bundle.sh --install  # moves it to ~/Applications and launches it
+swift test                     # the station list, its file, and link parsing
 ```
 
 Requires macOS 15 and Xcode. The Command Line Tools alone don't include `actool`, which compiles the icon. For testing from a terminal, `CLAUDE_FM_AUTOPLAY=1` starts playback at launch, and state changes go to stderr.

@@ -4,6 +4,7 @@ import ServiceManagement
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let player = StreamPlayer()
+    private let library = StationLibrary()
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let otherAudio = OtherAudioMonitor()
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         icon.onImage = { [weak self] image in self?.statusItem.button?.image = image }
         player.onStateChange = { [weak self] state in
             NSLog("Claude FM state: %@", String(describing: state))
+            self?.recordOutcome(of: state)
             self?.updateButton()
             self?.updateMonitor()
             self?.updater.installPendingUpdate()
@@ -37,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSLog("Claude FM: stopping because another app started playing")
             self?.player.stop()
         }
-        player.tune(to: StationStore.selectedVideoID, andPlay: false)
+        player.tune(to: library.selected?.source, andPlay: false)
         updateButton()
         // Start the updater at launch, so it checks on its own schedule.
         _ = updater
@@ -63,6 +65,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Stations are never checked in the background. What is known about one comes from
+    /// playing it: when it last played, or why it couldn't.
+    private func recordOutcome(of state: StreamPlayer.State) {
+        guard let id = library.selectedID else { return }
+        switch state {
+        case .playing:
+            library.markPlayed(id: id)
+        case .failed(let reason) where player.failureIsPermanent:
+            library.markFailed(id: id, reason: reason)
+        default:
+            break
+        }
+    }
+
     func menuDidClose(_ menu: NSMenu) {
         statusItem.menu = nil
     }
@@ -71,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let (mode, tip): (RadioIcon.Mode, String) = switch player.state {
+        case .stopped where library.selected == nil: (.off, "Claude FM: no stations")
         case .stopped: (.off, "\(stationName): \(clickToPlay ? "click" : "right-click") to play")
         case .loading: (.searching, "\(stationName): connecting…")
         case .playing: (.on, "\(stationName): playing. \(clickToPlay ? "Click" : "Right-click") to stop.")
@@ -91,7 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         status.isEnabled = false
         menu.addItem(status)
 
-        menu.addItem(item(player.isActive ? "Stop" : "Play", #selector(togglePlayback)))
+        let playback = item(player.isActive ? "Stop" : "Play", #selector(togglePlayback))
+        if library.selected == nil { playback.action = nil }
+        menu.addItem(playback)
         menu.addItem(VolumeMenuItem(volume: player.volume) { [weak self] in self?.player.volume = $0 })
         menu.addItem(item("Reconnect", #selector(reconnect)))
         menu.addItem(submenu("Stations", stationItems()))
@@ -124,38 +143,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func stationItems() -> [NSMenuItem] {
-        let selected = player.pinnedVideoID
-        let claudeFM = item("Claude FM", #selector(selectStation(_:)))
-        claudeFM.state = selected == nil ? .on : .off
-        var items = [claudeFM]
-        for station in StationStore.stations {
+        var items: [NSMenuItem] = []
+        for station in library.stations {
             let entry = item(station.name, #selector(selectStation(_:)))
-            entry.representedObject = station.videoID
-            entry.state = selected == station.videoID ? .on : .off
+            entry.representedObject = station.id
+            entry.state = station.id == library.selectedID ? .on : .off
             items.append(entry)
         }
-        items += [.separator(), item("Add Station from Clipboard", #selector(addStationFromClipboard))]
-        if let current = currentStation {
+        if !items.isEmpty { items.append(.separator()) }
+        items.append(item("Add Station from Clipboard", #selector(addStationFromClipboard)))
+        if let current = library.selected {
             items.append(item("Remove “\(current.name)”", #selector(removeCurrentStation)))
         }
         return items
     }
 
-    /// The station the user added that is selected now. Nil when Claude FM is.
-    private var currentStation: Station? {
-        StationStore.stations.first { $0.videoID == player.pinnedVideoID }
-    }
+    private var stationName: String { library.selected?.name ?? "No Stations" }
 
-    private var stationName: String { currentStation?.name ?? "Claude FM" }
-
-    private func tune(to videoID: String?, andPlay: Bool) {
-        StationStore.selectedVideoID = videoID
-        player.tune(to: videoID, andPlay: andPlay)
+    private func tune(to id: UUID?, andPlay: Bool) {
+        library.select(id)
+        player.tune(to: library.selected?.source, andPlay: andPlay)
         updateButton()
     }
 
     @objc private func selectStation(_ sender: NSMenuItem) {
-        tune(to: sender.representedObject as? String, andPlay: true)
+        tune(to: sender.representedObject as? UUID, andPlay: true)
     }
 
     @objc private func addStationFromClipboard() {
@@ -169,30 +181,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.runModal()
             return
         }
-        if !StationStore.stations.contains(where: { $0.videoID == videoID }) {
-            // Show the ID until the title arrives, so the station is usable right away.
-            StationStore.stations.append(Station(name: "YouTube \(videoID)", videoID: videoID))
+        // Show the ID until the title arrives, so the station is usable right away.
+        let placeholder = "YouTube \(videoID)"
+        let station = library.add(Station(name: placeholder, videoID: videoID))
+        if station.name == placeholder {
             Task {
                 guard let title = await Station.fetchTitle(videoID: videoID) else { return }
-                var stations = StationStore.stations
-                guard let index = stations.firstIndex(where: { $0.videoID == videoID }) else { return }
-                stations[index].name = title
-                StationStore.stations = stations
+                library.rename(id: station.id, to: title)
                 updateButton()
             }
         }
-        tune(to: videoID, andPlay: true)
+        tune(to: station.id, andPlay: true)
     }
 
     @objc private func removeCurrentStation() {
-        guard let current = currentStation else { return }
+        guard let current = library.selected else { return }
         let wasActive = player.isActive
-        StationStore.stations.removeAll { $0.videoID == current.videoID }
-        tune(to: nil, andPlay: wasActive)
+        library.remove(ids: [current.id])
+        player.tune(to: library.selected?.source, andPlay: wasActive && library.selected != nil)
+        updateButton()
     }
 
     private var statusLine: String {
         switch player.state {
+        case .stopped where library.selected == nil: "No Stations"
         case .stopped: "\(stationName): stopped"
         case .loading: "\(stationName): connecting…"
         case .playing: "\(stationName): playing"

@@ -2,9 +2,17 @@ import AppKit
 import WebKit
 
 /// Plays a YouTube stream through YouTube's embedded IFrame player, hosted in a web view
-/// that is never shown. The stream is Claude FM unless the user picked another station.
+/// that is never shown. What it plays is the selected station's source.
 @MainActor
 final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    /// Where a station's video comes from.
+    enum Source: Equatable {
+        /// Whatever clau.de/radio points at now. Looked up on each load.
+        case radioLink
+        /// One fixed video.
+        case video(String)
+    }
+
     enum State: Equatable {
         case stopped
         case loading
@@ -23,9 +31,11 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     }
 
     private(set) var videoID: String?
-    /// The video of the station the user picked. Nil is Claude FM, whose video is looked up
-    /// through the radio link.
-    private(set) var pinnedVideoID: String?
+    /// What the selected station plays. Nil when there is no station to play.
+    private(set) var source: Source?
+    /// Whether the last failure was YouTube refusing this video, as opposed to a network
+    /// problem or a broadcast that ended. Only the first says the station's link is dead.
+    private(set) var failureIsPermanent = false
     var watchURL: URL {
         URL(string: "https://www.youtube.com/watch?v=\(videoID ?? Self.fallbackVideoID)")!
     }
@@ -58,7 +68,9 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     }
 
     func play() {
+        guard source != nil else { return }
         wantsPlayback = true
+        failureIsPermanent = false
         state = .loading
         if webView == nil {
             Task { await load() }
@@ -80,13 +92,14 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         if resume { play() }
     }
 
-    /// Switches to another station, and starts it if `andPlay` is set. Nil is Claude FM.
-    func tune(to pinned: String?, andPlay: Bool) {
-        if pinned != pinnedVideoID {
+    /// Switches to another station, and starts it if `andPlay` is set. Nil is no station.
+    func tune(to newSource: Source?, andPlay: Bool) {
+        if newSource != source {
             tearDown()
             wantsPlayback = false
-            pinnedVideoID = pinned
-            videoID = pinned
+            failureIsPermanent = false
+            source = newSource
+            if case .video(let id) = newSource { videoID = id } else { videoID = nil }
         }
         if andPlay && !isActive { play() }
     }
@@ -96,11 +109,15 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     private func load() async {
         loadGeneration += 1
         let generation = loadGeneration
-        var id = pinnedVideoID
-        if id == nil { id = await Self.resolveVideoID() }
+        let id: String
+        switch source {
+        case .video(let fixed): id = fixed
+        case .radioLink: id = await Self.resolveVideoID() ?? Self.fallbackVideoID
+        case nil: return
+        }
         guard generation == loadGeneration, wantsPlayback else { return }
         videoID = id
-        buildWebView(videoID: id ?? Self.fallbackVideoID)
+        buildWebView(videoID: id)
     }
 
     /// Follows the clau.de/radio redirect and reads the `v` parameter of the YouTube URL it lands on.
@@ -185,7 +202,7 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
             case 1: state = .playing
             case 3: if wantsPlayback { state = .loading }
             case 0:
-                if wantsPlayback && pinnedVideoID != nil {
+                if wantsPlayback, case .video = source {
                     // A pasted link can be an ordinary video. A radio keeps going, so loop it.
                     run("player.playVideo()")
                 } else {
@@ -195,6 +212,9 @@ final class StreamPlayer: NSObject, WKScriptMessageHandler, WKNavigationDelegate
             default: break
             }
         case "error":
+            // These codes are YouTube's answer about the video itself. For a fixed video
+            // that means the link is dead. The radio link is looked up again on each load.
+            if case .video = source { failureIsPermanent = [2, 100, 101, 150].contains(value ?? 0) }
             state = .failed(Self.describe(errorCode: value))
         default:
             break
