@@ -17,6 +17,8 @@ The top of the menu is the player. The big button plays and stops. While the str
 
 **Settings…** opens the app's window. Its General tab has Stop When Other Audio Plays, what a click on the icon does, Launch at Login, and updates. Its About tab has the version and a link to the source.
 
+**Check for Updates…**, under Settings, looks for a newer release now and shows Sparkle's window with the result. Only a release build has it, and it is grayed out while a check is already running.
+
 The menu bar icon is the radio from the app icon, and its antenna shows what the player is doing. Stopped, the radio is faded with its antenna pushed down. While connecting or buffering, the antenna swings up and down like it's hunting for a station. If the stream fails, the antenna sags and shakes every couple of seconds, and the menu says why.
 
 <img src="docs/menubar-icon.gif" width="512" alt="The menu bar icon on light and dark menu bars, animating through connecting, playing, stopped, and stream failed">
@@ -99,7 +101,7 @@ The app icon is `Resources/AppIcon.icon`, an Icon Composer file that `bundle.sh`
 
 ## Releases and updates
 
-A release build updates itself with [Sparkle](https://sparkle-project.org). It checks the feed about once a day, downloads a newer build, verifies its signature, and relaunches into it. While the stream is playing, the relaunch waits until playback stops. **Update automatically** in the General tab turns this off.
+A release build updates itself with [Sparkle](https://sparkle-project.org). It checks the feed about once a day, downloads a newer build, verifies its signature, and relaunches into it. While the stream is playing, the relaunch waits until playback stops. **Update automatically** in the General tab turns this off. **Check for Updates…** in the menu or the General tab checks right away.
 
 ```sh
 ./scripts/release.sh 1.2.0            # build, sign, notarize, and publish v1.2.0 from main

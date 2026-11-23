@@ -131,6 +131,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
+        // Only a release build has a feed. A development build never updates itself, so it
+        // has no item. While a check is running, the item is grayed out.
+        if updater.isAvailable {
+            let check = item("Check for Updates…", #selector(checkForUpdates))
+            if !updater.canCheck {
+                check.action = nil
+                check.isEnabled = false
+            }
+            menu.addItem(check)
+        }
         menu.addItem(item("Quit Claude FM", #selector(quit), key: "q"))
     }
 
@@ -189,6 +199,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func addStation() { settings.showAddStation() }
     @objc private func manageStations() { settings.show(tab: .stations) }
     @objc private func openSettings() { settings.show() }
+
+    /// Sparkle shows its own window, so come forward first or it opens behind the app in
+    /// front. The menu is still closing here, and macOS hands focus back to the app that
+    /// had it, so ask again once the menu is gone, as the settings window does.
+    @objc private func checkForUpdates() {
+        NSApp.activate(ignoringOtherApps: true)
+        updater.checkForUpdates()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
 
     /// A menu bar app shows no main menu, but its key equivalents still work. Without
     /// these, the settings window has no Paste, Close or Select All.
