@@ -26,10 +26,16 @@ cp "$BIN" "$APP/Contents/MacOS/ClaudeFM"
 # The app icon. actool compiles the Icon Composer file into Assets.car, which macOS 26
 # and later draw with the system's glass treatment, and AppIcon.icns for macOS 15.
 # Info.plist names both below. scripts/render-icon.sh redraws the icon's artwork.
-xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" \
+#
+# The paths are absolute because actool hands the work to a daemon, ibtoold, that outlives
+# the command. The daemon resolves a relative path against the folder it was started in,
+# which is another project's when that project's build started it. A relative path then
+# fails, or compiles that project's icon into this app. On failure, show what actool said.
+ICON_LOG="$(mktemp)"
+xcrun actool "$PWD/Resources/AppIcon.icon" --compile "$PWD/$APP/Contents/Resources" \
   --platform macosx --minimum-deployment-target 15.0 --app-icon AppIcon \
   --output-partial-info-plist "$(mktemp -d)/icon.plist" --errors --warnings \
-  --output-format human-readable-text >/dev/null
+  --output-format human-readable-text >"$ICON_LOG" 2>&1 || { cat "$ICON_LOG" >&2; exit 1; }
 for f in Assets.car AppIcon.icns; do
   [[ -f "$APP/Contents/Resources/$f" ]] || { echo "error: actool didn't produce $f" >&2; exit 1; }
 done
